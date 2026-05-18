@@ -6,11 +6,11 @@
 
 ### 自动排版模式
 
-![自动排版模式预览](docs/screenshots/auto-mode-preview.png)
+![自动排版模式预览](docs/screenshots/auto-layout-provided.png)
 
 ### 滑动截图模式
 
-![滑动截图模式预览](docs/screenshots/scroll-mode-preview.png)
+![滑动截图模式预览](docs/screenshots/scroll-mode-provided.png)
 
 ## 功能特点
 
