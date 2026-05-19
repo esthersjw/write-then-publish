@@ -10,7 +10,6 @@ const els = {
   pageCount: $("#pageCount"),
   status: $("#statusText"),
   themeToggle: $("#themeToggleBtn"),
-  exportAll: $("#exportAllBtn"),
   downloadZip: $("#downloadZipBtn"),
   rerender: $("#rerenderBtn"),
   scrollMode: $("#scrollModeBtn"),
@@ -117,14 +116,11 @@ const FONT_STACKS = {
   "en-mono": '"SFMono-Regular", Menlo, Consolas, monospace',
 };
 
-const UI_THEMES = ["paper", "blue", "sage", "rose", "ink"];
+const UI_THEMES = ["light", "dark"];
 
 const UI_THEME_LABELS = {
-  paper: "纸白",
-  blue: "晴蓝",
-  sage: "青绿",
-  rose: "玫瑰",
-  ink: "墨色",
+  light: "白色",
+  dark: "黑色",
 };
 
 const defaultText = `[[image:sample]]
@@ -152,7 +148,7 @@ const state = {
   scrollOffset: 0,
   scrollMax: 0,
   colorBrush: false,
-  uiTheme: "paper",
+  uiTheme: "light",
 };
 
 const textHistory = {
@@ -185,7 +181,7 @@ function defaultFormState() {
     zhFont: "zh-system",
     enFont: "en-system",
     imageHeight: "520",
-    uiTheme: "paper",
+    uiTheme: "light",
     avatar: sampleAvatar,
     avatarCrop: null,
     images: state.images,
@@ -224,7 +220,7 @@ function applyForm(data) {
   els.zhFont.value = FONT_STACKS[data.zhFont] ? data.zhFont : "zh-system";
   els.enFont.value = FONT_STACKS[data.enFont] ? data.enFont : "en-system";
   els.imageHeight.value = String(data.imageHeight ?? "520") === "380" ? "520" : data.imageHeight ?? "520";
-  setUiTheme(data.uiTheme || "paper");
+  setUiTheme(data.uiTheme || "light");
   state.avatar = data.avatar || sampleAvatar;
   state.avatarCrop = data.avatarCrop || null;
   state.images = { ...defaultFormState().images, ...(data.images || {}) };
@@ -234,13 +230,14 @@ function applyForm(data) {
 }
 
 function setUiTheme(theme, announce = false) {
-  const nextTheme = UI_THEMES.includes(theme) ? theme : "paper";
+  const normalizedTheme = theme === "ink" ? "dark" : theme === "paper" ? "light" : theme;
+  const nextTheme = UI_THEMES.includes(normalizedTheme) ? normalizedTheme : "light";
   state.uiTheme = nextTheme;
   document.documentElement.dataset.uiTheme = nextTheme;
   if (els.themeToggle) {
     const label = UI_THEME_LABELS[nextTheme];
-    els.themeToggle.title = `切换主题色：当前 ${label}`;
-    els.themeToggle.setAttribute("aria-label", `切换主题色，当前 ${label}`);
+    els.themeToggle.title = `切换黑白主题：当前 ${label}`;
+    els.themeToggle.setAttribute("aria-label", `切换黑白主题，当前 ${label}`);
   }
   if (announce) {
     els.status.textContent = `已切换为${UI_THEME_LABELS[nextTheme]}主题`;
@@ -1668,17 +1665,25 @@ function setScrollOffset(value) {
   render();
 }
 
-function downloadCanvas(canvas, filename) {
+async function downloadCanvas(canvas, filename) {
+  const blob = await canvasToBlob(canvas);
+  if (!blob) {
+    els.status.textContent = "图片生成失败，请重新排版后再试";
+    return;
+  }
+  const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.download = filename;
-  link.href = canvas.toDataURL("image/png");
+  link.href = url;
   document.body.append(link);
   link.click();
   link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  els.status.textContent = `已下载 ${filename}`;
 }
 
 function canvasToBlob(canvas) {
-  return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/png"));
 }
 
 async function downloadAll() {
@@ -1696,6 +1701,10 @@ async function downloadAll() {
   const zip = new window.JSZip();
   for (const [index, canvas] of state.canvases.entries()) {
     const blob = await canvasToBlob(canvas);
+    if (!blob) {
+      els.status.textContent = "图片生成失败，请重新排版后再试";
+      return;
+    }
     const filename = state.mode === "scroll" ? "layout-scroll-shot.png" : `layout-page-${String(index + 1).padStart(2, "0")}.png`;
     zip.file(filename, blob);
   }
@@ -1707,7 +1716,7 @@ async function downloadAll() {
   document.body.append(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   els.status.textContent = state.mode === "scroll" ? "已打包当前滑动截图" : `已打包 ${state.canvases.length} 张图片`;
 }
 
@@ -1795,7 +1804,6 @@ function bindEvents() {
   els.replaceAll.addEventListener("click", replaceAll);
   els.themeToggle.addEventListener("click", toggleUiTheme);
   els.rerender.addEventListener("click", render);
-  els.exportAll.addEventListener("click", downloadAll);
   els.downloadZip.addEventListener("click", downloadAll);
 }
 

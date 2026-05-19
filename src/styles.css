@@ -6,16 +6,16 @@
   --paper: #ffffff;
   --canvas: #ffffff;
   --soft: #f8fafc;
-  --accent: #2563eb;
+  --accent: #17202f;
   --brush-color: #2563eb;
   --control-bg: #fbfcfe;
   --control-text: #263140;
   --popover-bg: #ffffff;
   --preview-bg: #ffffff;
   --preview-mask: #ffffff;
-  --active-bg: #eaf5ff;
-  --active-text: #0f5f9e;
-  --active-border: #1d9bf0;
+  --active-bg: #17202f;
+  --active-text: #ffffff;
+  --active-border: #17202f;
   --primary-bg: #17202f;
   --primary-text: #ffffff;
   --guide-bg: #f8fafc;
@@ -28,112 +28,42 @@
   --shadow-soft: 0 10px 18px rgba(23, 32, 47, 0.05);
   --shadow-popover: 0 18px 50px rgba(23, 32, 47, 0.18);
   --shadow-card: 0 18px 46px rgba(23, 32, 47, 0.16);
-  --focus-ring: rgba(37, 99, 235, 0.12);
+  --focus-ring: rgba(23, 32, 47, 0.14);
   --green: #1f8a63;
   --coral: #e55d42;
   --shadow: 0 18px 50px rgba(23, 32, 47, 0.12);
 }
 
-:root[data-ui-theme="blue"] {
-  --ink: #13243a;
-  --muted: #63758c;
-  --line: #cfe0f4;
-  --paper: #f8fbff;
-  --canvas: #eef6ff;
-  --soft: #eff6ff;
-  --accent: #1d9bf0;
-  --control-bg: #ffffff;
-  --control-text: #19324f;
-  --popover-bg: #ffffff;
-  --preview-bg: #f8fbff;
-  --preview-mask: #f8fbff;
-  --active-bg: #e0f2fe;
-  --active-text: #075985;
-  --active-border: #1d9bf0;
-  --primary-bg: #0f3c68;
-  --primary-text: #ffffff;
-  --guide-bg: #eff6ff;
-  --guide-text: #34516f;
-  --focus-ring: rgba(29, 155, 240, 0.16);
-}
-
-:root[data-ui-theme="sage"] {
-  --ink: #14251d;
-  --muted: #617268;
-  --line: #c9dfd2;
-  --paper: #f8fcf9;
-  --canvas: #f1f8f3;
-  --soft: #eef8f1;
-  --accent: #15803d;
-  --control-bg: #ffffff;
-  --control-text: #173b2d;
-  --popover-bg: #ffffff;
-  --preview-bg: #f8fcf9;
-  --preview-mask: #f8fcf9;
-  --active-bg: #dcfce7;
-  --active-text: #166534;
-  --active-border: #22c55e;
-  --primary-bg: #173b2d;
-  --primary-text: #ffffff;
-  --guide-bg: #eef8f1;
-  --guide-text: #496557;
-  --avatar-bg: #e6f4df;
-  --focus-ring: rgba(21, 128, 61, 0.14);
-}
-
-:root[data-ui-theme="rose"] {
-  --ink: #2b1820;
-  --muted: #7a6470;
-  --line: #efd0d9;
-  --paper: #fffafb;
-  --canvas: #fff3f6;
-  --soft: #fff1f5;
-  --accent: #db2777;
-  --control-bg: #ffffff;
-  --control-text: #4a1d2f;
-  --popover-bg: #ffffff;
-  --preview-bg: #fffafb;
-  --preview-mask: #fffafb;
-  --active-bg: #fce7f3;
-  --active-text: #9d174d;
-  --active-border: #db2777;
-  --primary-bg: #4a142a;
-  --primary-text: #ffffff;
-  --guide-bg: #fff1f5;
-  --guide-text: #755364;
-  --focus-ring: rgba(219, 39, 119, 0.15);
-}
-
-:root[data-ui-theme="ink"] {
+:root[data-ui-theme="dark"] {
   color-scheme: dark;
-  --ink: #edf2ff;
-  --muted: #a8b3c7;
-  --line: #334155;
-  --paper: #111827;
-  --canvas: #0f172a;
-  --soft: #1f2937;
-  --accent: #60a5fa;
-  --control-bg: #172033;
-  --control-text: #edf2ff;
-  --popover-bg: #111827;
-  --preview-bg: #0f172a;
-  --preview-mask: #0f172a;
-  --active-bg: #1e3a5f;
-  --active-text: #bfdbfe;
-  --active-border: #60a5fa;
-  --primary-bg: #f8fafc;
-  --primary-text: #0f172a;
-  --guide-bg: #172033;
-  --guide-text: #cbd5e1;
-  --avatar-bg: #1f2937;
-  --thumb-bg: #263244;
+  --ink: #f8fafc;
+  --muted: #b6becb;
+  --line: #3a3a3a;
+  --paper: #151515;
+  --canvas: #0b0b0b;
+  --soft: #1d1d1d;
+  --accent: #ffffff;
+  --control-bg: #171717;
+  --control-text: #f8fafc;
+  --popover-bg: #121212;
+  --preview-bg: #0b0b0b;
+  --preview-mask: #0b0b0b;
+  --active-bg: #ffffff;
+  --active-text: #050505;
+  --active-border: #ffffff;
+  --primary-bg: #ffffff;
+  --primary-text: #050505;
+  --guide-bg: #1b1b1b;
+  --guide-text: #d8dee8;
+  --avatar-bg: #202020;
+  --thumb-bg: #262626;
   --crop-stage-bg: #020617;
   --crop-canvas-bg: #020617;
-  --modal-overlay: rgba(2, 6, 23, 0.72);
-  --shadow-soft: 0 10px 18px rgba(2, 6, 23, 0.35);
-  --shadow-popover: 0 18px 50px rgba(2, 6, 23, 0.5);
-  --shadow-card: 0 18px 46px rgba(2, 6, 23, 0.42);
-  --focus-ring: rgba(96, 165, 250, 0.24);
+  --modal-overlay: rgba(0, 0, 0, 0.72);
+  --shadow-soft: 0 10px 18px rgba(0, 0, 0, 0.38);
+  --shadow-popover: 0 18px 50px rgba(0, 0, 0, 0.55);
+  --shadow-card: 0 18px 46px rgba(0, 0, 0, 0.46);
+  --focus-ring: rgba(255, 255, 255, 0.18);
 }
 
 * {
