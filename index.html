@@ -3,16 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>图文排版工具</title>
+    <title>写了就发</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2317202f'/%3E%3Cpath d='M18 17h28v7H18zm0 13h20v6H18zm0 12h28v6H18z' fill='%23fff'/%3E%3C/svg%3E" />
-    <link rel="stylesheet" href="src/styles.css?v=20260520-theme-card-sync" />
+    <link rel="stylesheet" href="src/styles.css?v=20260522-image-block-resize" />
   </head>
   <body>
     <main class="workspace">
       <aside class="editor-panel" aria-label="编辑器">
         <div class="brand-row">
           <div>
-            <h1>图文排版工具</h1>
+            <h1>写了就发</h1>
             <p id="pageCount">0 张图片</p>
           </div>
           <div class="brand-actions">
@@ -61,6 +61,26 @@
                 <div class="color-actions">
                   <button id="colorCancelBtn" class="secondary-button" type="button">取消</button>
                   <button id="colorConfirmBtn" class="primary-button" type="button">确定</button>
+                </div>
+              </div>
+            </details>
+
+            <details id="bgColorMenu" class="tool-menu">
+              <summary class="tool-button bg-color-tool" title="选中文字背景色" aria-label="选中文字背景色">
+                <i data-lucide="highlighter"></i>
+              </summary>
+              <div class="tool-popover color-popover">
+                <div class="color-guide">
+                  <strong>背景上色</strong>
+                  <span>1. 选择背景色  2. 点确定  3. 在文本框里选中要加底色的文字</span>
+                </div>
+                <label>
+                  背景颜色
+                  <input id="inlineBgColorInput" type="color" value="#fff3a3" />
+                </label>
+                <div class="color-actions">
+                  <button id="bgColorCancelBtn" class="secondary-button" type="button">取消</button>
+                  <button id="bgColorConfirmBtn" class="primary-button" type="button">确定</button>
                 </div>
               </div>
             </details>
@@ -229,6 +249,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@1.8.0/dist/umd/lucide.min.js"></script>
-    <script src="src/app.js?v=20260520-theme-card-sync"></script>
+    <script src="src/app.js?v=20260522-image-block-resize"></script>
   </body>
 </html>

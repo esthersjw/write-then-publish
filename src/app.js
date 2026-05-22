@@ -15,11 +15,16 @@ const els = {
   scrollMode: $("#scrollModeBtn"),
   contentImage: $("#contentImageInput"),
   inlineColor: $("#inlineColorInput"),
+  inlineBgColor: $("#inlineBgColorInput"),
   colorMenu: $("#colorMenu"),
+  bgColorMenu: $("#bgColorMenu"),
   colorTool: $(".color-tool"),
+  bgColorTool: $(".bg-color-tool"),
   colorGuide: $("#colorGuide"),
   colorConfirm: $("#colorConfirmBtn"),
   colorCancel: $("#colorCancelBtn"),
+  bgColorConfirm: $("#bgColorConfirmBtn"),
+  bgColorCancel: $("#bgColorCancelBtn"),
   find: $("#findInput"),
   replace: $("#replaceInput"),
   findNext: $("#findNextBtn"),
@@ -161,6 +166,7 @@ const state = {
   scrollOffset: 0,
   scrollMax: 0,
   colorBrush: false,
+  bgColorBrush: false,
   uiTheme: "light",
 };
 
@@ -180,6 +186,8 @@ const cropper = {
   display: null,
   drag: null,
 };
+
+let imageEditDrag = null;
 
 function defaultFormState() {
   return {
@@ -239,6 +247,7 @@ function applyForm(data) {
   state.images = { ...defaultFormState().images, ...(data.images || {}) };
   els.avatarPreview.src = state.avatar;
   document.documentElement.style.setProperty("--brush-color", els.inlineColor.value);
+  document.documentElement.style.setProperty("--text-bg-brush-color", els.inlineBgColor.value);
   updateImageList();
 }
 
@@ -464,10 +473,27 @@ function wrapSelectionWithColor() {
   requestRender();
 }
 
+function wrapSelectionWithBackground() {
+  commitTextHistory();
+  const textarea = els.content;
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const selected = textarea.value.slice(start, end) || "底色文字";
+  const color = els.inlineBgColor.value;
+  const next = `{{bg:${color}|${selected}}}`;
+  textarea.value = `${textarea.value.slice(0, start)}${next}${textarea.value.slice(end)}`;
+  textarea.focus();
+  textarea.setSelectionRange(start + next.length, start + next.length);
+  commitTextHistory();
+  requestRender();
+}
+
 function enableColorBrush() {
   state.colorBrush = true;
+  state.bgColorBrush = false;
   document.documentElement.style.setProperty("--brush-color", els.inlineColor.value);
   els.colorTool?.classList.add("active");
+  els.bgColorTool?.classList.remove("active");
   els.colorMenu.open = false;
   els.status.textContent = "刷色已开启，选中一段文字即可上色";
 }
@@ -478,6 +504,22 @@ function disableColorBrush() {
   els.colorMenu.open = false;
 }
 
+function enableBackgroundBrush() {
+  state.bgColorBrush = true;
+  state.colorBrush = false;
+  document.documentElement.style.setProperty("--text-bg-brush-color", els.inlineBgColor.value);
+  els.bgColorTool?.classList.add("active");
+  els.colorTool?.classList.remove("active");
+  els.bgColorMenu.open = false;
+  els.status.textContent = "背景上色已开启，选中一段文字即可加底色";
+}
+
+function disableBackgroundBrush() {
+  state.bgColorBrush = false;
+  els.bgColorTool?.classList.remove("active");
+  els.bgColorMenu.open = false;
+}
+
 function applyColorBrushToSelection() {
   if (!state.colorBrush) return;
   if (document.activeElement !== els.content) return;
@@ -485,6 +527,15 @@ function applyColorBrushToSelection() {
   wrapSelectionWithColor();
   disableColorBrush();
   els.status.textContent = "已应用选中文字颜色";
+}
+
+function applyBackgroundBrushToSelection() {
+  if (!state.bgColorBrush) return;
+  if (document.activeElement !== els.content) return;
+  if (els.content.selectionStart === els.content.selectionEnd) return;
+  wrapSelectionWithBackground();
+  disableBackgroundBrush();
+  els.status.textContent = "已应用选中文字背景色";
 }
 
 function findNext() {
@@ -967,58 +1018,71 @@ function resizeCropRect(handle, startRect, point, image, aspect) {
 }
 
 function parseBlocks(content) {
-  const rawBlocks = content.replace(/\r\n/g, "\n").split(/\n{2,}/);
+  const normalized = content.replace(/\r\n/g, "\n");
+  const lines = normalized.match(/[^\n]*(?:\n|$)/g) || [];
   const blocks = [];
+  let offset = 0;
 
-  for (const raw of rawBlocks) {
-    const text = raw.trim();
-    if (!text) continue;
+  for (const rawLine of lines) {
+    const line = rawLine.endsWith("\n") ? rawLine.slice(0, -1) : rawLine;
+    const leading = line.match(/^\s*/)[0].length;
+    const trailing = line.match(/\s*$/)[0].length;
+    const trimmed = line.slice(leading, line.length - trailing);
+    const trimmedStart = offset + leading;
 
-    const imageOnly = text.match(/^\[\[image:([\w-]+)\]\]$/);
-    if (imageOnly) {
-      blocks.push({ type: "image", id: imageOnly[1] });
-      continue;
-    }
-
-    const lines = text.split("\n");
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-
+    if (trimmed) {
       const imageInline = trimmed.match(/^\[\[image:([\w-]+)\]\]$/);
       if (imageInline) {
         blocks.push({ type: "image", id: imageInline[1] });
       } else if (trimmed.startsWith("# ")) {
-        blocks.push({ type: "h1", tokens: parseInline(trimmed.slice(2).trim()) });
+        const contentStart = trimmedStart + 2 + countLeadingSpaces(trimmed.slice(2));
+        blocks.push({ type: "h1", tokens: parseInline(trimmed.slice(2).trim(), contentStart) });
       } else if (trimmed.startsWith("## ")) {
-        blocks.push({ type: "h2", tokens: parseInline(trimmed.slice(3).trim()) });
+        const contentStart = trimmedStart + 3 + countLeadingSpaces(trimmed.slice(3));
+        blocks.push({ type: "h2", tokens: parseInline(trimmed.slice(3).trim(), contentStart) });
       } else if (trimmed.startsWith("> ")) {
-        blocks.push({ type: "quote", tokens: parseInline(trimmed.slice(2).trim()) });
+        const contentStart = trimmedStart + 2 + countLeadingSpaces(trimmed.slice(2));
+        blocks.push({ type: "quote", tokens: parseInline(trimmed.slice(2).trim(), contentStart) });
       } else {
-        blocks.push({ type: "p", tokens: parseInline(trimmed) });
+        blocks.push({ type: "p", tokens: parseInline(trimmed, trimmedStart) });
       }
     }
+
+    offset += rawLine.length;
   }
 
   return blocks;
 }
 
-function parseInline(text) {
+function countLeadingSpaces(text) {
+  return text.match(/^\s*/)[0].length;
+}
+
+function parseInline(text, baseStart = 0) {
   const tokens = [];
   let i = 0;
 
   while (i < text.length) {
     const colorMatch = text.slice(i).match(/^\{\{color:(#[0-9a-fA-F]{3,8})\|([\s\S]*?)\}\}/);
     if (colorMatch) {
-      tokens.push({ text: colorMatch[2], color: colorMatch[1] });
+      const textStart = baseStart + i + colorMatch[0].indexOf("|") + 1;
+      tokens.push({ text: colorMatch[2], color: colorMatch[1], sourceStart: textStart, sourceEnd: textStart + colorMatch[2].length });
       i += colorMatch[0].length;
+      continue;
+    }
+
+    const bgMatch = text.slice(i).match(/^\{\{bg:(#[0-9a-fA-F]{3,8})\|([\s\S]*?)\}\}/);
+    if (bgMatch) {
+      const textStart = baseStart + i + bgMatch[0].indexOf("|") + 1;
+      tokens.push({ text: bgMatch[2], bgColor: bgMatch[1], sourceStart: textStart, sourceEnd: textStart + bgMatch[2].length });
+      i += bgMatch[0].length;
       continue;
     }
 
     if (text.startsWith("**", i)) {
       const close = text.indexOf("**", i + 2);
       if (close !== -1) {
-        tokens.push({ text: text.slice(i + 2, close), bold: true });
+        tokens.push({ text: text.slice(i + 2, close), bold: true, sourceStart: baseStart + i + 2, sourceEnd: baseStart + close });
         i = close + 2;
         continue;
       }
@@ -1027,17 +1091,17 @@ function parseInline(text) {
     if (text.startsWith("*", i)) {
       const close = text.indexOf("*", i + 1);
       if (close !== -1) {
-        tokens.push({ text: text.slice(i + 1, close), italic: true });
+        tokens.push({ text: text.slice(i + 1, close), italic: true, sourceStart: baseStart + i + 1, sourceEnd: baseStart + close });
         i = close + 1;
         continue;
       }
     }
 
-    const nextMarkers = ["{{color:", "**", "*"]
+    const nextMarkers = ["{{color:", "{{bg:", "**", "*"]
       .map((marker) => text.indexOf(marker, i + 1))
       .filter((index) => index !== -1);
     const next = nextMarkers.length ? Math.min(...nextMarkers) : text.length;
-    tokens.push({ text: text.slice(i, next) });
+    tokens.push({ text: text.slice(i, next), sourceStart: baseStart + i, sourceEnd: baseStart + next });
     i = next;
   }
 
@@ -1108,11 +1172,54 @@ function fontString(style, token = {}) {
 function fontFamilyForText(text, settings) {
   const zhFont = FONT_STACKS[settings.zhFont] || FONT_STACKS["zh-system"];
   const enFont = FONT_STACKS[settings.enFont] || FONT_STACKS["en-system"];
-  return /[A-Za-z0-9_@#%+./:-]/.test(text || "") ? `${enFont}, ${zhFont}` : `${zhFont}, ${enFont}`;
+  const emojiFont = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"';
+  return /[A-Za-z0-9_@#%+./:-]/.test(text || "") ? `${enFont}, ${zhFont}, ${emojiFont}` : `${zhFont}, ${enFont}, ${emojiFont}`;
 }
 
-function splitTokenText(text) {
-  return text.match(/[\u3400-\u9fff]|[A-Za-z0-9_@#%+./:-]+|\s+|[^\s]/g) || [];
+function splitTokenText(token) {
+  const text = token.text || "";
+  const segments = graphemeSegments(text);
+  const units = [];
+  let word = null;
+
+  function flushWord() {
+    if (!word) return;
+    units.push(word);
+    word = null;
+  }
+
+  for (const segment of segments) {
+    if (/^[A-Za-z0-9_@#%+./:-]$/.test(segment.text)) {
+      if (!word) word = { text: "", start: segment.start, end: segment.end };
+      word.text += segment.text;
+      word.end = segment.end;
+      continue;
+    }
+    flushWord();
+    units.push(segment);
+  }
+
+  flushWord();
+  return units;
+}
+
+function graphemeSegments(text) {
+  if (window.Intl?.Segmenter) {
+    const segmenter = new Intl.Segmenter("zh", { granularity: "grapheme" });
+    return Array.from(segmenter.segment(text), (part) => ({
+      text: part.segment,
+      start: part.index,
+      end: part.index + part.segment.length,
+    }));
+  }
+
+  const result = [];
+  let index = 0;
+  for (const char of Array.from(text)) {
+    result.push({ text: char, start: index, end: index + char.length });
+    index += char.length;
+  }
+  return result;
 }
 
 function isNoLineStartPunctuation(text) {
@@ -1143,17 +1250,22 @@ function wrapTokens(ctx, tokens, style, maxWidth) {
   }
 
   for (const token of tokens) {
-    for (const unit of splitTokenText(token.text)) {
-      const part = { ...token, text: unit };
+    for (const unit of splitTokenText(token)) {
+      const part = {
+        ...token,
+        text: unit.text,
+        sourceStart: token.sourceStart + unit.start,
+        sourceEnd: token.sourceStart + unit.end,
+      };
       const measured = measureToken(ctx, part, style);
-      const shouldStayWithPrevious = isNoLineStartPunctuation(unit);
+      const shouldStayWithPrevious = isNoLineStartPunctuation(unit.text);
       const previousText = line.length ? line[line.length - 1].text : "";
       const previousNeedsNext = isNoLineEndPunctuation(previousText);
 
       if (width + measured > maxWidth && line.length && !shouldStayWithPrevious && !previousNeedsNext) {
         pushLine();
       }
-      if (!line.length && /^\s+$/.test(unit)) continue;
+      if (!line.length && /^\s+$/.test(unit.text)) continue;
       if (!line.length && shouldStayWithPrevious && lines.length) {
         lines[lines.length - 1].push(part);
         continue;
@@ -1176,20 +1288,30 @@ function getImageSourceRect(image, crop) {
   return clampCropRect(crop, image);
 }
 
-function imageBlockSize(sourceRect, maxWidth, maxHeight) {
+function imageBlockSize(sourceRect, maxWidth, maxHeight, layout = null) {
+  const normalized = normalizeImageLayout(layout);
   const aspect = sourceRect.width / sourceRect.height;
-  let width = maxWidth;
+  let width = maxWidth * normalized.widthScale;
   let height = width / aspect;
 
   if (height > maxHeight) {
     height = maxHeight;
     width = height * aspect;
   }
+  const maxOffset = Math.max(0, maxWidth - width);
 
   return {
     width,
     height,
-    offsetX: (maxWidth - width) / 2,
+    offsetX: clamp(maxOffset / 2 + normalized.offsetX, 0, maxOffset),
+  };
+}
+
+function normalizeImageLayout(layout = {}) {
+  const value = layout || {};
+  return {
+    widthScale: clamp(Number(value.widthScale) || 1, 0.35, 1),
+    offsetX: Number(value.offsetX) || 0,
   };
 }
 
@@ -1248,13 +1370,15 @@ async function buildPages(settings) {
       const img = imageCache[block.id];
       if (!img) continue;
       const sourceRect = getImageSourceRect(img, data.crop);
-      const size = imageBlockSize(sourceRect, contentWidth, Math.min(settings.imageHeight, bounds.bottom - bounds.top));
+      const size = imageBlockSize(sourceRect, contentWidth, Math.min(settings.imageHeight, bounds.bottom - bounds.top), data.layout);
       const height = size.height;
       ensureSpace(height, hasContent ? 24 : 0);
       page.items.push({
         type: "image",
+        imageId: block.id,
         image: img,
         sourceRect,
+        layout: data.layout || null,
         x: bounds.left + size.offsetX,
         y,
         width: size.width,
@@ -1335,12 +1459,14 @@ async function buildScrollPage(settings) {
       const img = imageCache[block.id];
       if (!img) continue;
       const sourceRect = getImageSourceRect(img, data.crop);
-      const size = imageBlockSize(sourceRect, contentWidth, settings.imageHeight);
+      const size = imageBlockSize(sourceRect, contentWidth, settings.imageHeight, data.layout);
       y += hasContent ? 24 : 0;
       page.items.push({
         type: "image",
+        imageId: block.id,
         image: img,
         sourceRect,
+        layout: data.layout || null,
         x: bounds.left + size.offsetX,
         y,
         width: size.width,
@@ -1391,15 +1517,14 @@ function renderPage(page, index, total) {
   canvas.width = CANVAS_WIDTH;
   canvas.height = CANVAS_HEIGHT;
   canvas.dataset.page = String(index + 1);
+  canvas._page = page;
+  canvas._scrollPage = false;
   const ctx = canvas.getContext("2d");
   ctx.imageSmoothingQuality = "high";
 
-  drawBackground(ctx, page.settings);
-  drawHeader(ctx, page.settings, page.avatar, page.badge);
-  for (const item of page.items) {
-    if (item.type === "image") drawImageBlock(ctx, item);
-    if (item.type === "text") drawTextLine(ctx, item, page.settings);
-  }
+  drawPageToContext(ctx, page, false);
+  canvas._textHits = collectTextHits(ctx, page, false);
+  canvas._imageHits = collectImageHits(page, false);
   return canvas;
 }
 
@@ -1408,11 +1533,28 @@ function renderScrollPage(page) {
   canvas.width = CANVAS_WIDTH;
   canvas.height = CANVAS_HEIGHT;
   canvas.dataset.page = "scroll";
+  canvas._page = page;
+  canvas._scrollPage = true;
   const ctx = canvas.getContext("2d");
   ctx.imageSmoothingQuality = "high";
 
+  drawPageToContext(ctx, page, true);
+  canvas._textHits = collectTextHits(ctx, page, true);
+  canvas._imageHits = collectImageHits(page, true);
+  return canvas;
+}
+
+function drawPageToContext(ctx, page, scrollPage = false) {
   drawBackground(ctx, page.settings);
   drawHeader(ctx, page.settings, page.avatar, page.badge);
+
+  if (!scrollPage) {
+    for (const item of page.items) {
+      if (item.type === "image") drawImageBlock(ctx, item);
+      if (item.type === "text") drawTextLine(ctx, item, page.settings);
+    }
+    return;
+  }
 
   const { bounds } = page;
   ctx.save();
@@ -1432,8 +1574,59 @@ function renderScrollPage(page) {
   ctx.moveTo(bounds.left, bounds.top - 10);
   ctx.lineTo(bounds.right, bounds.top - 10);
   ctx.stroke();
+}
 
-  return canvas;
+function collectTextHits(ctx, page, scrollPage = false) {
+  const hits = [];
+  const bounds = page.bounds || null;
+
+  for (const item of page.items) {
+    if (item.type !== "text") continue;
+    let cursor = item.x;
+    const y = scrollPage ? (bounds?.top || 0) + item.y - page.scrollOffset : item.y;
+    if (scrollPage && bounds && (y + item.lineHeight < bounds.top || y > bounds.bottom)) {
+      continue;
+    }
+
+    for (const token of item.line) {
+      ctx.font = fontString(item.style, token);
+      const width = ctx.measureText(token.text).width;
+      if (!/^\s+$/.test(token.text) && Number.isFinite(token.sourceStart) && Number.isFinite(token.sourceEnd)) {
+        const top = Math.max(y, scrollPage && bounds ? bounds.top : y);
+        const bottom = Math.min(y + item.lineHeight, scrollPage && bounds ? bounds.bottom : y + item.lineHeight);
+        hits.push({
+          x: cursor,
+          y: top,
+          width,
+          height: Math.max(0, bottom - top),
+          sourceStart: token.sourceStart,
+          sourceEnd: token.sourceEnd,
+        });
+      }
+      cursor += width;
+    }
+  }
+
+  return hits;
+}
+
+function collectImageHits(page, scrollPage = false) {
+  const bounds = page.bounds || null;
+  return page.items
+    .filter((item) => item.type === "image" && item.imageId)
+    .map((item) => {
+      const y = scrollPage ? (bounds?.top || 0) + item.y - page.scrollOffset : item.y;
+      const top = scrollPage && bounds ? Math.max(y, bounds.top) : y;
+      const bottom = scrollPage && bounds ? Math.min(y + item.height, bounds.bottom) : y + item.height;
+      return {
+        imageId: item.imageId,
+        x: item.x,
+        y: top,
+        width: item.width,
+        height: Math.max(0, bottom - top),
+      };
+    })
+    .filter((hit) => hit.height > 0 && hit.width > 0);
 }
 
 function drawBackground(ctx, settings) {
@@ -1540,9 +1733,15 @@ function drawTextLine(ctx, item, settings) {
   const baseline = y + Math.round(lineHeight * 0.75);
   for (const token of line) {
     ctx.font = fontString(style, token);
+    const width = ctx.measureText(token.text).width;
+    if (token.bgColor) {
+      ctx.fillStyle = token.bgColor;
+      roundedRect(ctx, cursor - 3, y + Math.round(lineHeight * 0.14), width + 6, Math.round(lineHeight * 0.72), 7);
+      ctx.fill();
+    }
     ctx.fillStyle = token.color || style.color;
     ctx.fillText(token.text, cursor, baseline);
-    cursor += ctx.measureText(token.text).width;
+    cursor += width;
   }
 }
 
@@ -1633,6 +1832,8 @@ function drawPreview(canvases) {
       attachScrollFrameHandlers(frame);
     }
     frame.append(canvas);
+    frame.append(createImageEditLayer(canvas));
+    frame.append(createTextHitLayer(canvas));
 
     const actions = document.createElement("div");
     actions.className = "page-actions";
@@ -1656,6 +1857,163 @@ function drawPreview(canvases) {
       ? `滑动截图模式：在卡片上滚动，下载当前画面`
       : `已生成 ${canvases.length} 张，尺寸 ${CANVAS_WIDTH}x${CANVAS_HEIGHT}`;
   if (window.lucide) window.lucide.createIcons();
+}
+
+function createImageEditLayer(canvas) {
+  const layer = document.createElement("div");
+  layer.className = "preview-image-edit-layer";
+
+  for (const hit of canvas._imageHits || []) {
+    const box = document.createElement("div");
+    box.className = "preview-image-box";
+    box.style.left = `${(hit.x / CANVAS_WIDTH) * 100}%`;
+    box.style.top = `${(hit.y / CANVAS_HEIGHT) * 100}%`;
+    box.style.width = `${(hit.width / CANVAS_WIDTH) * 100}%`;
+    box.style.height = `${(hit.height / CANVAS_HEIGHT) * 100}%`;
+    box.dataset.imageId = hit.imageId;
+    box.title = "拖动调整图片位置；拖右下角等比缩放整个图片；双击恢复";
+    box.addEventListener("pointerdown", startPreviewImageEdit);
+    box.addEventListener("dblclick", resetPreviewImageView);
+
+    const resize = document.createElement("span");
+    resize.className = "preview-image-resize";
+    resize.dataset.action = "resize";
+    resize.addEventListener("pointerdown", startPreviewImageEdit);
+    box.append(resize);
+    layer.append(box);
+  }
+
+  return layer;
+}
+
+function createTextHitLayer(canvas) {
+  const layer = document.createElement("div");
+  layer.className = "preview-hit-layer";
+
+  for (const hit of canvas._textHits || []) {
+    if (hit.width <= 0 || hit.height <= 0) continue;
+    const target = document.createElement("button");
+    target.type = "button";
+    target.className = "preview-text-hit";
+    target.style.left = `${(hit.x / CANVAS_WIDTH) * 100}%`;
+    target.style.top = `${(hit.y / CANVAS_HEIGHT) * 100}%`;
+    target.style.width = `${(hit.width / CANVAS_WIDTH) * 100}%`;
+    target.style.height = `${(hit.height / CANVAS_HEIGHT) * 100}%`;
+    target.dataset.start = String(hit.sourceStart);
+    target.dataset.end = String(hit.sourceEnd);
+    target.addEventListener("pointerenter", handlePreviewTextTarget);
+    target.addEventListener("click", handlePreviewTextTarget);
+    layer.append(target);
+  }
+
+  return layer;
+}
+
+function handlePreviewTextTarget(event) {
+  const start = Number(event.currentTarget.dataset.start);
+  const end = Number(event.currentTarget.dataset.end);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return;
+  focusEditorRange(start, end);
+}
+
+function focusEditorRange(start, end) {
+  els.content.focus({ preventScroll: true });
+  els.content.setSelectionRange(start, end);
+  scrollTextareaToRange(start);
+}
+
+function scrollTextareaToRange(index) {
+  const before = els.content.value.slice(0, index);
+  const lineIndex = before.split("\n").length - 1;
+  const lineHeight = Number.parseFloat(getComputedStyle(els.content).lineHeight) || 28;
+  const targetTop = Math.max(0, lineIndex * lineHeight - els.content.clientHeight / 2);
+  els.content.scrollTop = targetTop;
+}
+
+function startPreviewImageEdit(event) {
+  const box = event.currentTarget.classList?.contains("preview-image-box")
+    ? event.currentTarget
+    : event.currentTarget.closest?.(".preview-image-box") || event.target.closest(".preview-image-box");
+  const frame = box.closest(".page-frame");
+  const canvas = frame?.querySelector("canvas");
+  const imageId = box.dataset.imageId;
+  if (!frame || !canvas || !imageId || !state.images[imageId]) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  const rect = frame.getBoundingClientRect();
+  imageEditDrag = {
+    imageId,
+    canvas,
+    frame,
+    action: event.currentTarget.dataset?.action === "resize" || event.target?.dataset?.action === "resize" ? "resize" : "move",
+    startX: event.clientX,
+    startY: event.clientY,
+    startLayout: normalizeImageLayout(state.images[imageId].layout),
+    startBox: {
+      x: Number.parseFloat(box.style.left) / 100 * CANVAS_WIDTH,
+      width: Number.parseFloat(box.style.width) / 100 * CANVAS_WIDTH,
+    },
+    contentWidth: 780,
+    canvasScaleX: CANVAS_WIDTH / rect.width,
+    canvasScaleY: CANVAS_HEIGHT / rect.height,
+  };
+  box.setPointerCapture?.(event.pointerId);
+  document.addEventListener("pointermove", movePreviewImageEdit);
+  document.addEventListener("pointerup", stopPreviewImageEdit, { once: true });
+}
+
+function movePreviewImageEdit(event) {
+  if (!imageEditDrag) return;
+  event.preventDefault();
+  const dx = (event.clientX - imageEditDrag.startX) * imageEditDrag.canvasScaleX;
+  const dy = (event.clientY - imageEditDrag.startY) * imageEditDrag.canvasScaleY;
+  const nextLayout = imageEditDrag.action === "resize"
+    ? resizeImageLayout(imageEditDrag.startLayout, imageEditDrag.startBox, dx)
+    : moveImageLayout(imageEditDrag.startLayout, imageEditDrag.startBox, dx);
+  state.images[imageEditDrag.imageId].layout = nextLayout;
+  requestRender();
+}
+
+function stopPreviewImageEdit() {
+  if (!imageEditDrag) return;
+  document.removeEventListener("pointermove", movePreviewImageEdit);
+  const imageId = imageEditDrag.imageId;
+  imageEditDrag = null;
+  saveState();
+  requestRender();
+  els.status.textContent = `已调整图片 ${state.images[imageId]?.name || imageId}`;
+}
+
+function moveImageLayout(startLayout, startBox, dx) {
+  const width = startBox.width;
+  const maxOffset = Math.max(0, 780 - width);
+  const centeredOffset = maxOffset / 2;
+  const nextAbsoluteOffset = clamp(centeredOffset + startLayout.offsetX + dx, 0, maxOffset);
+  return normalizeImageLayout({
+    ...startLayout,
+    offsetX: nextAbsoluteOffset - centeredOffset,
+  });
+}
+
+function resizeImageLayout(startLayout, startBox, dx) {
+  const nextWidth = clamp(startBox.width + dx, 780 * 0.35, 780);
+  const nextScale = nextWidth / 780;
+  return normalizeImageLayout({
+    ...startLayout,
+    widthScale: nextScale,
+  });
+}
+
+function resetPreviewImageView(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  const imageId = event.currentTarget.dataset.imageId;
+  if (!imageId || !state.images[imageId]) return;
+  state.images[imageId].layout = null;
+  saveState();
+  render();
+  els.status.textContent = `已恢复图片 ${state.images[imageId]?.name || imageId}`;
 }
 
 function attachScrollFrameHandlers(frame) {
@@ -1841,12 +2199,25 @@ function bindEvents() {
   els.inlineColor.addEventListener("input", () => {
     document.documentElement.style.setProperty("--brush-color", els.inlineColor.value);
   });
+  els.inlineBgColor.addEventListener("input", () => {
+    document.documentElement.style.setProperty("--text-bg-brush-color", els.inlineBgColor.value);
+  });
   els.colorConfirm.addEventListener("click", enableColorBrush);
   els.colorCancel.addEventListener("click", disableColorBrush);
-  els.content.addEventListener("mouseup", () => window.setTimeout(applyColorBrushToSelection, 0));
+  els.bgColorConfirm.addEventListener("click", enableBackgroundBrush);
+  els.bgColorCancel.addEventListener("click", disableBackgroundBrush);
+  els.content.addEventListener("mouseup", () => {
+    window.setTimeout(() => {
+      applyColorBrushToSelection();
+      applyBackgroundBrushToSelection();
+    }, 0);
+  });
   els.content.addEventListener("keyup", (event) => {
     if (event.key.startsWith("Arrow") || event.key === "Shift") {
-      window.setTimeout(applyColorBrushToSelection, 0);
+      window.setTimeout(() => {
+        applyColorBrushToSelection();
+        applyBackgroundBrushToSelection();
+      }, 0);
     }
   });
   els.contentImage.addEventListener("change", handleContentImage);

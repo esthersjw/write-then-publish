@@ -8,6 +8,7 @@
   --soft: #f8fafc;
   --accent: #17202f;
   --brush-color: #2563eb;
+  --text-bg-brush-color: #fff3a3;
   --control-bg: #fbfcfe;
   --control-text: #263140;
   --popover-bg: #ffffff;
@@ -228,17 +229,26 @@ button:disabled {
   pointer-events: none;
 }
 
-.color-tool {
+.color-tool,
+.bg-color-tool {
   overflow: hidden;
 }
 
-.color-tool::after {
+.color-tool::after,
+.bg-color-tool::after {
   content: "";
   position: absolute;
   inset: auto 7px 6px;
   height: 3px;
   border-radius: 2px;
+}
+
+.color-tool::after {
   background: var(--brush-color);
+}
+
+.bg-color-tool::after {
+  background: var(--text-bg-brush-color);
 }
 
 textarea {
@@ -637,6 +647,7 @@ input[type="color"] {
 }
 
 .page-frame {
+  position: relative;
   overflow: hidden;
   border-radius: 8px;
   border: 1px solid var(--line);
@@ -652,6 +663,61 @@ input[type="color"] {
   display: block;
   width: 100%;
   height: auto;
+}
+
+.preview-hit-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.preview-image-edit-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.preview-image-box {
+  position: absolute;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: move;
+  pointer-events: auto;
+}
+
+.preview-image-box:hover,
+.preview-image-box:focus-within {
+  border-color: var(--active-border);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.preview-image-resize {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--paper);
+  border-radius: 999px;
+  background: var(--active-border);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.22);
+  cursor: nwse-resize;
+}
+
+.preview-text-hit {
+  position: absolute;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: text;
+  pointer-events: auto;
+}
+
+.preview-text-hit:hover,
+.preview-text-hit:focus-visible {
+  outline: 1px solid var(--active-border);
+  background: rgba(37, 99, 235, 0.13);
 }
 
 .page-actions {
