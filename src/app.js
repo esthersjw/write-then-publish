@@ -2230,6 +2230,33 @@ async function downloadAll() {
 
 const requestRender = debounce(render, 120);
 
+function positionToolPopover(menu) {
+  const popover = menu.querySelector(".tool-popover");
+  if (!popover) return;
+
+  popover.style.left = "";
+  popover.style.right = "";
+
+  if (window.matchMedia("(max-width: 620px)").matches) return;
+
+  const margin = 12;
+  const menuRect = menu.getBoundingClientRect();
+  const popoverRect = popover.getBoundingClientRect();
+  let left = 0;
+
+  const overflowRight = menuRect.left + popoverRect.width - (window.innerWidth - margin);
+  if (overflowRight > 0) left -= overflowRight;
+
+  const overflowLeft = menuRect.left + left - margin;
+  if (overflowLeft < 0) left -= overflowLeft;
+
+  popover.style.left = `${Math.round(left)}px`;
+}
+
+function positionOpenToolPopovers() {
+  document.querySelectorAll(".tool-menu[open]").forEach(positionToolPopover);
+}
+
 function bindEvents() {
   document.querySelectorAll(".tool-menu").forEach((menu) => {
     const summary = menu.querySelector("summary");
@@ -2244,8 +2271,11 @@ function bindEvents() {
       document.querySelectorAll(".tool-menu").forEach((other) => {
         if (other !== menu) other.open = false;
       });
+      requestAnimationFrame(() => positionToolPopover(menu));
     });
   });
+
+  window.addEventListener("resize", positionOpenToolPopovers);
 
   document.querySelectorAll("[data-format]").forEach((button) => {
     button.addEventListener("click", () => wrapSelection(button.dataset.format));

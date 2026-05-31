@@ -418,7 +418,8 @@ input[type="color"] {
 .tool-popover {
   position: absolute;
   top: 44px;
-  right: 0;
+  left: 0;
+  right: auto;
   z-index: 30;
   width: min(370px, calc(100vw - 36px));
   padding: 12px;
