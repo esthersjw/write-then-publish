@@ -681,27 +681,73 @@ input[type="color"] {
   position: absolute;
   border: 1px solid transparent;
   border-radius: 8px;
-  cursor: move;
   pointer-events: auto;
 }
 
 .preview-image-box:hover,
-.preview-image-box:focus-within {
+.preview-image-box:focus-within,
+.preview-image-box.is-resizing {
   border-color: var(--active-border);
-  background: rgba(37, 99, 235, 0.08);
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.preview-image-align {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--popover-bg);
+  box-shadow: var(--shadow-soft);
+  opacity: 0;
+  transform: translateX(-50%) translateY(-4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  pointer-events: auto;
+}
+
+.preview-image-box:hover .preview-image-align,
+.preview-image-box:focus-within .preview-image-align,
+.preview-image-box.is-resizing .preview-image-align {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.preview-image-align button {
+  display: inline-flex;
+  width: 24px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--control-text);
+  background: transparent;
+}
+
+.preview-image-align button:hover {
+  color: var(--active-text);
+  background: var(--active-bg);
+}
+
+.preview-image-align svg {
+  width: 15px;
+  height: 15px;
 }
 
 .preview-image-resize {
   position: absolute;
-  right: -5px;
-  bottom: -5px;
-  width: 14px;
-  height: 14px;
+  right: -8px;
+  bottom: -8px;
+  width: 20px;
+  height: 20px;
   border: 2px solid var(--paper);
   border-radius: 999px;
   background: var(--active-border);
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.22);
   cursor: nwse-resize;
+  pointer-events: auto;
 }
 
 .preview-text-hit {

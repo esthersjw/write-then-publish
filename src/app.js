@@ -245,7 +245,7 @@ function applyForm(data) {
   state.avatar = data.avatar || sampleAvatar;
   state.avatarCrop = data.avatarCrop || null;
   state.images = { ...defaultFormState().images, ...(data.images || {}) };
-  els.avatarPreview.src = state.avatar;
+  updateAvatarPreview();
   document.documentElement.style.setProperty("--brush-color", els.inlineColor.value);
   document.documentElement.style.setProperty("--text-bg-brush-color", els.inlineBgColor.value);
   updateImageList();
@@ -618,6 +618,7 @@ async function handleContentImage(event) {
     src,
     name: file.name,
     crop: null,
+    layout: null,
   };
   updateImageList();
   insertAtSelection(els.content, `\n[[image:${id}]]\n`);
@@ -629,10 +630,33 @@ async function handleAvatar(event) {
   if (!file) return;
   state.avatar = await readFileAsDataURL(file);
   state.avatarCrop = null;
-  els.avatarPreview.src = state.avatar;
+  updateAvatarPreview();
   updateImageList();
   requestRender();
+  await openCropper("avatar");
   event.target.value = "";
+}
+
+async function updateAvatarPreview() {
+  if (!els.avatarPreview) return;
+  if (!state.avatarCrop) {
+    els.avatarPreview.src = state.avatar;
+    return;
+  }
+
+  try {
+    const image = await loadImage(state.avatar);
+    const crop = clampCropRect(state.avatarCrop, image);
+    const canvas = document.createElement("canvas");
+    canvas.width = 160;
+    canvas.height = 160;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingQuality = "high";
+    drawSourceCoverImage(ctx, image, crop, 0, 0, canvas.width, canvas.height);
+    els.avatarPreview.src = canvas.toDataURL("image/png");
+  } catch {
+    els.avatarPreview.src = state.avatar;
+  }
 }
 
 function updateImageList() {
@@ -734,6 +758,7 @@ function applyCropper() {
 
   if (cropper.target.kind === "avatar") {
     state.avatarCrop = crop;
+    updateAvatarPreview();
   } else if (state.images[cropper.target.id]) {
     state.images[cropper.target.id].crop = crop;
   }
@@ -746,6 +771,7 @@ function resetCropperTarget() {
   if (!cropper.target) return;
   if (cropper.target.kind === "avatar") {
     state.avatarCrop = null;
+    updateAvatarPreview();
   } else if (state.images[cropper.target.id]) {
     state.images[cropper.target.id].crop = null;
   }
@@ -1291,27 +1317,32 @@ function getImageSourceRect(image, crop) {
 function imageBlockSize(sourceRect, maxWidth, maxHeight, layout = null) {
   const normalized = normalizeImageLayout(layout);
   const aspect = sourceRect.width / sourceRect.height;
-  let width = maxWidth * normalized.widthScale;
-  let height = width / aspect;
-
-  if (height > maxHeight) {
-    height = maxHeight;
-    width = height * aspect;
-  }
+  const baseWidth = Math.min(maxWidth, maxHeight * aspect);
+  const width = baseWidth * normalized.widthScale;
+  const height = width / aspect;
   const maxOffset = Math.max(0, maxWidth - width);
+  let offsetX = maxOffset / 2;
+
+  if (normalized.align === "left") {
+    offsetX = 0;
+  } else if (normalized.align === "right") {
+    offsetX = maxOffset;
+  }
 
   return {
     width,
     height,
-    offsetX: clamp(maxOffset / 2 + normalized.offsetX, 0, maxOffset),
+    offsetX,
+    baseWidth,
   };
 }
 
 function normalizeImageLayout(layout = {}) {
   const value = layout || {};
+  const align = ["left", "center", "right"].includes(value.align) ? value.align : "center";
   return {
-    widthScale: clamp(Number(value.widthScale) || 1, 0.35, 1),
-    offsetX: Number(value.offsetX) || 0,
+    widthScale: clamp(Number(value.widthScale) || 1, 0.25, 1),
+    align,
   };
 }
 
@@ -1378,7 +1409,7 @@ async function buildPages(settings) {
         imageId: block.id,
         image: img,
         sourceRect,
-        layout: data.layout || null,
+        baseWidth: size.baseWidth,
         x: bounds.left + size.offsetX,
         y,
         width: size.width,
@@ -1466,7 +1497,7 @@ async function buildScrollPage(settings) {
         imageId: block.id,
         image: img,
         sourceRect,
-        layout: data.layout || null,
+        baseWidth: size.baseWidth,
         x: bounds.left + size.offsetX,
         y,
         width: size.width,
@@ -1624,6 +1655,7 @@ function collectImageHits(page, scrollPage = false) {
         y: top,
         width: item.width,
         height: Math.max(0, bottom - top),
+        baseWidth: item.baseWidth || item.width,
       };
     })
     .filter((hit) => hit.height > 0 && hit.width > 0);
@@ -1866,24 +1898,45 @@ function createImageEditLayer(canvas) {
   for (const hit of canvas._imageHits || []) {
     const box = document.createElement("div");
     box.className = "preview-image-box";
-    box.style.left = `${(hit.x / CANVAS_WIDTH) * 100}%`;
-    box.style.top = `${(hit.y / CANVAS_HEIGHT) * 100}%`;
-    box.style.width = `${(hit.width / CANVAS_WIDTH) * 100}%`;
-    box.style.height = `${(hit.height / CANVAS_HEIGHT) * 100}%`;
     box.dataset.imageId = hit.imageId;
-    box.title = "拖动调整图片位置；拖右下角等比缩放整个图片；双击恢复";
-    box.addEventListener("pointerdown", startPreviewImageEdit);
-    box.addEventListener("dblclick", resetPreviewImageView);
+    box.dataset.baseWidth = String(hit.baseWidth || hit.width);
+    box.title = "拖右下角调整图片大小；点击左/中/右按钮调整对齐";
+    applyImageBoxStyle(box, hit);
+
+    const alignBar = document.createElement("div");
+    alignBar.className = "preview-image-align";
+    [
+      ["left", "align-start-horizontal", "左对齐"],
+      ["center", "align-center-horizontal", "居中"],
+      ["right", "align-end-horizontal", "右对齐"],
+    ].forEach(([align, icon, label]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.align = align;
+      button.title = label;
+      button.setAttribute("aria-label", label);
+      button.innerHTML = `<i data-lucide="${icon}"></i>`;
+      button.addEventListener("click", setPreviewImageAlign);
+      alignBar.append(button);
+    });
 
     const resize = document.createElement("span");
     resize.className = "preview-image-resize";
     resize.dataset.action = "resize";
-    resize.addEventListener("pointerdown", startPreviewImageEdit);
-    box.append(resize);
+    resize.addEventListener("pointerdown", startPreviewImageResize);
+
+    box.append(alignBar, resize);
     layer.append(box);
   }
 
   return layer;
+}
+
+function applyImageBoxStyle(box, hit) {
+  box.style.left = `${(hit.x / CANVAS_WIDTH) * 100}%`;
+  box.style.top = `${(hit.y / CANVAS_HEIGHT) * 100}%`;
+  box.style.width = `${(hit.width / CANVAS_WIDTH) * 100}%`;
+  box.style.height = `${(hit.height / CANVAS_HEIGHT) * 100}%`;
 }
 
 function createTextHitLayer(canvas) {
@@ -1930,90 +1983,98 @@ function scrollTextareaToRange(index) {
   els.content.scrollTop = targetTop;
 }
 
-function startPreviewImageEdit(event) {
-  const box = event.currentTarget.classList?.contains("preview-image-box")
-    ? event.currentTarget
-    : event.currentTarget.closest?.(".preview-image-box") || event.target.closest(".preview-image-box");
-  const frame = box.closest(".page-frame");
-  const canvas = frame?.querySelector("canvas");
-  const imageId = box.dataset.imageId;
-  if (!frame || !canvas || !imageId || !state.images[imageId]) return;
+function setPreviewImageAlign(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  const align = event.currentTarget.dataset.align;
+  const box = event.currentTarget.closest(".preview-image-box");
+  const imageId = box?.dataset.imageId;
+  if (!imageId || !state.images[imageId] || !["left", "center", "right"].includes(align)) return;
+
+  state.images[imageId].layout = {
+    ...normalizeImageLayout(state.images[imageId].layout),
+    align,
+  };
+  saveState();
+  render();
+  els.status.textContent = align === "left" ? "图片已左对齐" : align === "right" ? "图片已右对齐" : "图片已居中";
+}
+
+function startPreviewImageResize(event) {
+  const box = event.currentTarget.closest(".preview-image-box");
+  const frame = box?.closest(".page-frame");
+  const imageId = box?.dataset.imageId;
+  if (!box || !frame || !imageId || !state.images[imageId]) return;
 
   event.preventDefault();
   event.stopPropagation();
-  const rect = frame.getBoundingClientRect();
+  const frameRect = frame.getBoundingClientRect();
   imageEditDrag = {
     imageId,
-    canvas,
-    frame,
-    action: event.currentTarget.dataset?.action === "resize" || event.target?.dataset?.action === "resize" ? "resize" : "move",
+    box,
     startX: event.clientX,
     startY: event.clientY,
     startLayout: normalizeImageLayout(state.images[imageId].layout),
     startBox: {
-      x: Number.parseFloat(box.style.left) / 100 * CANVAS_WIDTH,
-      width: Number.parseFloat(box.style.width) / 100 * CANVAS_WIDTH,
+      x: (Number.parseFloat(box.style.left) / 100) * CANVAS_WIDTH,
+      y: (Number.parseFloat(box.style.top) / 100) * CANVAS_HEIGHT,
+      width: (Number.parseFloat(box.style.width) / 100) * CANVAS_WIDTH,
+      height: (Number.parseFloat(box.style.height) / 100) * CANVAS_HEIGHT,
+      baseWidth: Number(box.dataset.baseWidth) || (Number.parseFloat(box.style.width) / 100) * CANVAS_WIDTH,
     },
-    contentWidth: 780,
-    canvasScaleX: CANVAS_WIDTH / rect.width,
-    canvasScaleY: CANVAS_HEIGHT / rect.height,
+    canvasScaleX: CANVAS_WIDTH / frameRect.width,
+    canvasScaleY: CANVAS_HEIGHT / frameRect.height,
   };
+  box.classList.add("is-resizing");
   box.setPointerCapture?.(event.pointerId);
-  document.addEventListener("pointermove", movePreviewImageEdit);
-  document.addEventListener("pointerup", stopPreviewImageEdit, { once: true });
+  document.addEventListener("pointermove", movePreviewImageResize);
+  document.addEventListener("pointerup", stopPreviewImageResize, { once: true });
 }
 
-function movePreviewImageEdit(event) {
+function movePreviewImageResize(event) {
   if (!imageEditDrag) return;
   event.preventDefault();
   const dx = (event.clientX - imageEditDrag.startX) * imageEditDrag.canvasScaleX;
   const dy = (event.clientY - imageEditDrag.startY) * imageEditDrag.canvasScaleY;
-  const nextLayout = imageEditDrag.action === "resize"
-    ? resizeImageLayout(imageEditDrag.startLayout, imageEditDrag.startBox, dx)
-    : moveImageLayout(imageEditDrag.startLayout, imageEditDrag.startBox, dx);
+  const nextLayout = resizeImageLayout(imageEditDrag.startLayout, imageEditDrag.startBox, dx, dy);
   state.images[imageEditDrag.imageId].layout = nextLayout;
-  requestRender();
+
+  const nextWidth = imageEditDrag.startBox.baseWidth * nextLayout.widthScale;
+  const nextHeight = nextWidth * (imageEditDrag.startBox.height / imageEditDrag.startBox.width);
+  const maxOffset = Math.max(0, 780 - nextWidth);
+  const nextX = nextLayout.align === "left" ? 42 : nextLayout.align === "right" ? 42 + maxOffset : 42 + maxOffset / 2;
+  applyImageBoxStyle(imageEditDrag.box, {
+    x: nextX,
+    y: imageEditDrag.startBox.y,
+    width: nextWidth,
+    height: nextHeight,
+  });
 }
 
-function stopPreviewImageEdit() {
+function stopPreviewImageResize() {
   if (!imageEditDrag) return;
-  document.removeEventListener("pointermove", movePreviewImageEdit);
+  document.removeEventListener("pointermove", movePreviewImageResize);
   const imageId = imageEditDrag.imageId;
+  imageEditDrag.box.classList.remove("is-resizing");
   imageEditDrag = null;
   saveState();
-  requestRender();
+  render();
   els.status.textContent = `已调整图片 ${state.images[imageId]?.name || imageId}`;
 }
 
-function moveImageLayout(startLayout, startBox, dx) {
-  const width = startBox.width;
-  const maxOffset = Math.max(0, 780 - width);
-  const centeredOffset = maxOffset / 2;
-  const nextAbsoluteOffset = clamp(centeredOffset + startLayout.offsetX + dx, 0, maxOffset);
-  return normalizeImageLayout({
+function resizeImageLayout(startLayout, startBox, dx, dy) {
+  const delta = diagonalResizeDelta(startBox, dx, dy);
+  const nextWidth = clamp(startBox.width * (1 + delta), startBox.baseWidth * 0.25, startBox.baseWidth);
+  return {
     ...startLayout,
-    offsetX: nextAbsoluteOffset - centeredOffset,
-  });
+    widthScale: nextWidth / startBox.baseWidth,
+  };
 }
 
-function resizeImageLayout(startLayout, startBox, dx) {
-  const nextWidth = clamp(startBox.width + dx, 780 * 0.35, 780);
-  const nextScale = nextWidth / 780;
-  return normalizeImageLayout({
-    ...startLayout,
-    widthScale: nextScale,
-  });
-}
-
-function resetPreviewImageView(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  const imageId = event.currentTarget.dataset.imageId;
-  if (!imageId || !state.images[imageId]) return;
-  state.images[imageId].layout = null;
-  saveState();
-  render();
-  els.status.textContent = `已恢复图片 ${state.images[imageId]?.name || imageId}`;
+function diagonalResizeDelta(startBox, dx, dy) {
+  const width = Math.max(1, startBox.width);
+  const height = Math.max(1, startBox.height);
+  return ((dx * width) + (dy * height)) / ((width * width) + (height * height));
 }
 
 function attachScrollFrameHandlers(frame) {
@@ -2112,43 +2173,59 @@ function canvasToBlob(canvas) {
   return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/png"));
 }
 
+async function isZipBlob(blob) {
+  const header = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+  return header[0] === 0x50 && header[1] === 0x4b && (header[2] === 0x03 || header[2] === 0x05 || header[2] === 0x07);
+}
+
+async function downloadCanvasesIndividually() {
+  for (const [index, canvas] of state.canvases.entries()) {
+    const filename = state.mode === "scroll" ? "layout-scroll-shot.png" : `layout-page-${String(index + 1).padStart(2, "0")}.png`;
+    window.setTimeout(() => downloadCanvas(canvas, filename), index * 180);
+  }
+}
+
 async function downloadAll() {
   if (!state.canvases.length) return;
 
   if (!window.JSZip) {
     els.status.textContent = "当前环境不支持打包，将逐张下载";
-    state.canvases.forEach((canvas, index) => {
-      const filename = state.mode === "scroll" ? "layout-scroll-shot.png" : `layout-page-${String(index + 1).padStart(2, "0")}.png`;
-      window.setTimeout(() => downloadCanvas(canvas, filename), index * 120);
-    });
+    await downloadCanvasesIndividually();
     return;
   }
 
   const zipFilename = state.mode === "scroll" ? "graphic-layout-scroll-shot.zip" : "graphic-layout-pages.zip";
-  const writable = await chooseSaveTarget(zipFilename, "application/zip", ".zip");
-  if (writable === false) {
-    els.status.textContent = "已取消下载";
-    return;
-  }
-
   els.status.textContent = "正在打包图片...";
-  const zip = new window.JSZip();
-  for (const [index, canvas] of state.canvases.entries()) {
-    const blob = await canvasToBlob(canvas);
-    if (!blob) {
-      els.status.textContent = "图片生成失败，请重新排版后再试";
+  try {
+    const zip = new window.JSZip();
+    for (const [index, canvas] of state.canvases.entries()) {
+      const blob = await canvasToBlob(canvas);
+      if (!blob) {
+        els.status.textContent = "图片生成失败，请重新排版后再试";
+        return;
+      }
+      const filename = state.mode === "scroll" ? "layout-scroll-shot.png" : `layout-page-${String(index + 1).padStart(2, "0")}.png`;
+      zip.file(filename, blob);
+    }
+    const blob = await zip.generateAsync({
+      type: "blob",
+      compression: "STORE",
+      mimeType: "application/zip",
+    });
+
+    if (!(await isZipBlob(blob))) {
+      els.status.textContent = "打包文件异常，已改为逐张下载";
+      await downloadCanvasesIndividually();
       return;
     }
-    const filename = state.mode === "scroll" ? "layout-scroll-shot.png" : `layout-page-${String(index + 1).padStart(2, "0")}.png`;
-    zip.file(filename, blob);
+
+    await saveBlob(blob, zipFilename);
+    els.status.textContent = state.mode === "scroll" ? "已下载当前滑动截图压缩包" : `已下载 ${state.canvases.length} 张图片压缩包`;
+  } catch (error) {
+    console.error(error);
+    els.status.textContent = "打包失败，已改为逐张下载";
+    await downloadCanvasesIndividually();
   }
-  const blob = await zip.generateAsync({ type: "blob" });
-  await saveBlob(blob, zipFilename, writable);
-  els.status.textContent = writable
-    ? `已保存 ${zipFilename}`
-    : state.mode === "scroll"
-      ? "已交给浏览器下载当前滑动截图"
-      : `已交给浏览器下载 ${state.canvases.length} 张图片`;
 }
 
 const requestRender = debounce(render, 120);
