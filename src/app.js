@@ -2,6 +2,9 @@ const CANVAS_WIDTH = 864;
 const CANVAS_HEIGHT = 1152;
 const CARD_SIDE_PADDING = 42;
 const CARD_CONTENT_WIDTH = CANVAS_WIDTH - CARD_SIDE_PADDING * 2;
+const EXPORT_IMAGE_MIME = "image/png";
+const EXPORT_IMAGE_EXTENSION = ".png";
+const EXPORT_ZIP_COMPRESSION = "STORE";
 const STORAGE_KEY = "graphicTextLayoutState.v1";
 
 const $ = (selector) => document.querySelector(selector);
@@ -2123,12 +2126,12 @@ function setScrollOffset(value) {
 }
 
 async function downloadCanvas(canvas, filename) {
-  const writable = await chooseSaveTarget(filename, "image/png", ".png");
+  const writable = await chooseSaveTarget(filename, EXPORT_IMAGE_MIME, EXPORT_IMAGE_EXTENSION);
   if (writable === false) {
     els.status.textContent = "已取消下载";
     return;
   }
-  const blob = await canvasToBlob(canvas);
+  const blob = await canvasToLosslessPngBlob(canvas);
   if (!blob) {
     els.status.textContent = "图片生成失败，请重新排版后再试";
     return;
@@ -2174,8 +2177,8 @@ async function saveBlob(blob, filename, writable = null) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function canvasToBlob(canvas) {
-  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/png"));
+function canvasToLosslessPngBlob(canvas) {
+  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), EXPORT_IMAGE_MIME));
 }
 
 async function isZipBlob(blob) {
@@ -2204,7 +2207,7 @@ async function downloadAll() {
   try {
     const zip = new window.JSZip();
     for (const [index, canvas] of state.canvases.entries()) {
-      const blob = await canvasToBlob(canvas);
+      const blob = await canvasToLosslessPngBlob(canvas);
       if (!blob) {
         els.status.textContent = "图片生成失败，请重新排版后再试";
         return;
@@ -2214,7 +2217,7 @@ async function downloadAll() {
     }
     const blob = await zip.generateAsync({
       type: "blob",
-      compression: "STORE",
+      compression: EXPORT_ZIP_COMPRESSION,
       mimeType: "application/zip",
     });
 
