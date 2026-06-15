@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>写了就发</title>
+    <title>写了就发 | Write Then Publish</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2317202f'/%3E%3Cpath d='M18 17h28v7H18zm0 13h20v6H18zm0 12h28v6H18z' fill='%23fff'/%3E%3C/svg%3E" />
-    <link rel="stylesheet" href="src/styles.css?v=20260615-convert-mode" />
+    <link rel="stylesheet" href="src/styles.css?v=20260615-brand-title" />
   </head>
   <body>
     <main class="workspace">
@@ -29,11 +29,13 @@
           <div id="projectHistory" class="history-list"></div>
         </div>
       </aside>
+      <button class="panel-resizer" data-panel-resize="history" type="button" aria-label="拖动调整历史栏宽度"></button>
 
       <aside class="editor-panel" aria-label="编辑器">
         <div class="brand-row">
-          <div>
+          <div class="brand-title">
             <h1>写了就发</h1>
+            <span class="brand-english">Write Then Publish</span>
             <p id="pageCount">0 张图片</p>
           </div>
           <div class="mode-switch" aria-label="切换工作区">
@@ -214,6 +216,7 @@
 
         <textarea id="contentInput" class="editor-textarea" spellcheck="false"></textarea>
       </aside>
+      <button class="panel-resizer" data-panel-resize="editor" type="button" aria-label="拖动调整编辑区宽度"></button>
 
       <section class="preview-panel" aria-label="图片预览">
         <div class="preview-topbar">
@@ -225,10 +228,6 @@
             <button id="scrollModeBtn" class="secondary-button" type="button">
               <i data-lucide="scroll-text"></i>
               滑动截图
-            </button>
-            <button id="rerenderBtn" class="secondary-button" type="button">
-              <i data-lucide="refresh-cw"></i>
-              重新排版
             </button>
             <button id="downloadZipBtn" class="primary-button" type="button">
               <i data-lucide="download"></i>
@@ -325,6 +324,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@1.8.0/dist/umd/lucide.min.js"></script>
-    <script src="src/app.js?v=20260615-convert-mode"></script>
+    <script src="src/app.js?v=20260615-resizable-shortcuts"></script>
   </body>
 </html>

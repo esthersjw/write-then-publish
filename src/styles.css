@@ -102,8 +102,12 @@ button:disabled {
 
 .workspace {
   display: grid;
-  grid-template-columns: auto minmax(420px, 500px) 1fr;
+  grid-template-columns: var(--history-width-collapsed, 48px) 6px minmax(360px, var(--editor-width, 500px)) 6px minmax(360px, 1fr);
   height: 100vh;
+}
+
+.workspace.history-open {
+  grid-template-columns: var(--history-width, 260px) 6px minmax(360px, var(--editor-width, 500px)) 6px minmax(360px, 1fr);
 }
 
 .history-sidebar,
@@ -115,15 +119,14 @@ button:disabled {
 
 .history-sidebar {
   position: relative;
-  width: 48px;
+  width: 100%;
   overflow: hidden;
   background: var(--paper);
   border-right: 1px solid var(--line);
-  transition: width 160ms ease;
 }
 
 .history-sidebar.open {
-  width: 260px;
+  width: 100%;
 }
 
 .history-tab {
@@ -152,7 +155,7 @@ button:disabled {
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 10px;
-  width: 260px;
+  width: var(--history-width, 260px);
   height: 100%;
   padding: 18px 12px;
   opacity: 0;
@@ -165,6 +168,48 @@ button:disabled {
   opacity: 1;
   pointer-events: auto;
   transform: translateX(0);
+}
+
+.panel-resizer {
+  position: relative;
+  z-index: 4;
+  width: 6px;
+  min-width: 6px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: col-resize;
+  align-self: stretch;
+  touch-action: none;
+}
+
+.panel-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: var(--line);
+  transition: background 120ms ease, width 120ms ease, left 120ms ease;
+}
+
+.panel-resizer:hover::after,
+.panel-resizer.active::after {
+  left: 1px;
+  width: 3px;
+  background: var(--active-bg);
+}
+
+body.resizing-panels {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body.resizing-panels iframe,
+body.resizing-panels canvas,
+body.resizing-panels textarea {
+  pointer-events: none;
 }
 
 .editor-panel {
@@ -187,9 +232,16 @@ button:disabled {
 }
 
 .brand-row {
+  flex-wrap: wrap;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
   margin-bottom: 0;
+}
+
+.brand-title {
+  flex: 1 1 170px;
+  min-width: 170px;
 }
 
 .brand-actions {
@@ -239,6 +291,16 @@ button:disabled {
 
 .brand-row h1 {
   font-size: 22px;
+  white-space: nowrap;
+}
+
+.brand-english {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.15;
+  white-space: nowrap;
 }
 
 .brand-row p,
@@ -1399,6 +1461,14 @@ body[data-app-mode="article"] .profile-inline {
     grid-template-columns: 1fr;
     height: auto;
     min-height: 100vh;
+  }
+
+  .workspace.history-open {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-resizer {
+    display: none;
   }
 
   .history-sidebar {

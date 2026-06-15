@@ -7,11 +7,17 @@ const EXPORT_IMAGE_EXTENSION = ".png";
 const EXPORT_ZIP_COMPRESSION = "STORE";
 const STORAGE_KEY = "graphicTextLayoutState.v1";
 const PROJECTS_STORAGE_KEY = "graphicTextLayoutProjects.v1";
+const PANEL_LAYOUT_STORAGE_KEY = "writeThenPublishPanelLayout.v1";
 const MAX_PROJECTS = 24;
+const PANEL_LIMITS = {
+  history: { min: 210, max: 380, fallback: 260 },
+  editor: { min: 360, max: 760, fallback: 500 },
+};
 
 const $ = (selector) => document.querySelector(selector);
 
 const els = {
+  workspace: $(".workspace"),
   content: $("#contentInput"),
   pages: $("#pages"),
   pageCount: $("#pageCount"),
@@ -22,12 +28,12 @@ const els = {
   newProject: $("#newProjectBtn"),
   projectHistory: $("#projectHistory"),
   historyFilterButtons: document.querySelectorAll("[data-history-filter]"),
+  panelResizers: document.querySelectorAll("[data-panel-resize]"),
   modeButtons: document.querySelectorAll(".mode-switch [data-app-mode]"),
   convertMode: $("#convertModeBtn"),
   headerModeToggle: $("#headerModeToggleBtn"),
   themeToggle: $("#themeToggleBtn"),
   downloadZip: $("#downloadZipBtn"),
-  rerender: $("#rerenderBtn"),
   scrollMode: $("#scrollModeBtn"),
   articleSettings: $("#articleSettings"),
   articleThemeButtons: document.querySelectorAll("[data-article-theme]"),
@@ -198,6 +204,10 @@ const state = {
   currentProjectId: null,
   projects: [],
   historyFilter: "all",
+  panelLayout: {
+    history: PANEL_LIMITS.history.fallback,
+    editor: PANEL_LIMITS.editor.fallback,
+  },
 };
 
 const textHistory = {
@@ -372,7 +382,6 @@ function updateAppMode() {
   els.convertMode.querySelector("span").textContent = targetLabel;
   els.articleSettings.hidden = state.appMode !== "article";
   els.scrollMode.hidden = state.appMode === "article";
-  els.rerender.hidden = state.appMode === "article";
   els.downloadZip.hidden = state.appMode === "article";
   els.headerModeToggle.hidden = state.appMode === "article";
 }
@@ -432,6 +441,70 @@ function normalizeArticleColor(value) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function loadPanelLayout() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(PANEL_LAYOUT_STORAGE_KEY) || "{}");
+    state.panelLayout.history = clamp(Number(stored.history) || PANEL_LIMITS.history.fallback, PANEL_LIMITS.history.min, PANEL_LIMITS.history.max);
+    state.panelLayout.editor = clamp(Number(stored.editor) || PANEL_LIMITS.editor.fallback, PANEL_LIMITS.editor.min, PANEL_LIMITS.editor.max);
+  } catch {
+    state.panelLayout.history = PANEL_LIMITS.history.fallback;
+    state.panelLayout.editor = PANEL_LIMITS.editor.fallback;
+  }
+}
+
+function savePanelLayout() {
+  localStorage.setItem(PANEL_LAYOUT_STORAGE_KEY, JSON.stringify(state.panelLayout));
+}
+
+function applyPanelLayout() {
+  els.workspace?.style.setProperty("--history-width", `${Math.round(state.panelLayout.history)}px`);
+  els.workspace?.style.setProperty("--editor-width", `${Math.round(state.panelLayout.editor)}px`);
+}
+
+function startPanelResize(event) {
+  const target = event.currentTarget.dataset.panelResize;
+  if (!["history", "editor"].includes(target)) return;
+  if (window.matchMedia("(max-width: 980px)").matches) return;
+
+  event.preventDefault();
+  if (target === "history" && !els.historySidebar?.classList.contains("open")) {
+    setHistoryOpen(true);
+  }
+
+  const startX = event.clientX;
+  const startEditor = state.panelLayout.editor;
+  const workspaceRect = els.workspace.getBoundingClientRect();
+  const resizeHandle = event.currentTarget;
+  resizeHandle.classList.add("active");
+  document.body.classList.add("resizing-panels");
+  resizeHandle.setPointerCapture?.(event.pointerId);
+
+  const move = (moveEvent) => {
+    if (target === "history") {
+      const nextHistory = moveEvent.clientX - workspaceRect.left;
+      state.panelLayout.history = clamp(nextHistory, PANEL_LIMITS.history.min, PANEL_LIMITS.history.max);
+    } else {
+      const nextEditor = startEditor + moveEvent.clientX - startX;
+      state.panelLayout.editor = clamp(nextEditor, PANEL_LIMITS.editor.min, PANEL_LIMITS.editor.max);
+    }
+    applyPanelLayout();
+  };
+
+  const stop = (upEvent) => {
+    resizeHandle.classList.remove("active");
+    document.body.classList.remove("resizing-panels");
+    resizeHandle.releasePointerCapture?.(upEvent.pointerId);
+    savePanelLayout();
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", stop);
+    window.removeEventListener("pointercancel", stop);
+  };
+
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", stop);
+  window.addEventListener("pointercancel", stop);
 }
 
 function debounce(fn, wait = 140) {
@@ -643,6 +716,7 @@ function setHistoryFilter(filter) {
 function setHistoryOpen(open) {
   if (!els.historySidebar) return;
   els.historySidebar.classList.toggle("open", open);
+  els.workspace?.classList.toggle("history-open", open);
   els.historyToggle?.setAttribute("aria-label", open ? "收起历史记录" : "打开历史记录");
   els.historyToggle?.setAttribute("title", open ? "收起历史记录" : "打开历史记录");
 }
@@ -798,7 +872,23 @@ function redoTextChange() {
 }
 
 function handleTextShortcut(event) {
-  const isUndoKey = event.key.toLowerCase() === "z" && (event.metaKey || event.ctrlKey) && !event.altKey;
+  const key = event.key.toLowerCase();
+  const isModifierShortcut = (event.metaKey || event.ctrlKey) && !event.altKey;
+  if (!isModifierShortcut) return;
+
+  if (key === "b" && !event.shiftKey) {
+    event.preventDefault();
+    wrapSelection("bold");
+    return;
+  }
+
+  if (key === "i" && !event.shiftKey) {
+    event.preventDefault();
+    wrapSelection("italic");
+    return;
+  }
+
+  const isUndoKey = key === "z";
   if (!isUndoKey) return;
   event.preventDefault();
   if (event.shiftKey) {
@@ -2663,7 +2753,7 @@ async function downloadCanvas(canvas, filename) {
   }
   const blob = await canvasToLosslessPngBlob(canvas);
   if (!blob) {
-    els.status.textContent = "图片生成失败，请重新排版后再试";
+    els.status.textContent = "图片生成失败，请调整内容后再试";
     return;
   }
   await saveBlob(blob, filename, writable);
@@ -2739,7 +2829,7 @@ async function downloadAll() {
     for (const [index, canvas] of state.canvases.entries()) {
       const blob = await canvasToLosslessPngBlob(canvas);
       if (!blob) {
-        els.status.textContent = "图片生成失败，请重新排版后再试";
+        els.status.textContent = "图片生成失败，请调整内容后再试";
         return;
       }
       const filename = state.mode === "scroll" ? "layout-scroll-shot.png" : `layout-page-${String(index + 1).padStart(2, "0")}.png`;
@@ -2820,6 +2910,11 @@ function bindEvents() {
   });
 
   window.addEventListener("resize", positionOpenToolPopovers);
+  window.addEventListener("resize", applyPanelLayout);
+
+  els.panelResizers.forEach((resizer) => {
+    resizer.addEventListener("pointerdown", startPanelResize);
+  });
 
   document.querySelectorAll("[data-format]").forEach((button) => {
     button.addEventListener("click", () => wrapSelection(button.dataset.format));
@@ -2923,10 +3018,11 @@ function bindEvents() {
   els.convertMode.addEventListener("click", convertCurrentMode);
   els.headerModeToggle.addEventListener("click", toggleHeaderMode);
   els.themeToggle.addEventListener("click", toggleUiTheme);
-  els.rerender.addEventListener("click", render);
   els.downloadZip.addEventListener("click", downloadAll);
 }
 
+loadPanelLayout();
+applyPanelLayout();
 applyForm(loadState());
 resetTextHistory();
 updateProjectHistory();
