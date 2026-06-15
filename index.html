@@ -5,10 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>写了就发</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2317202f'/%3E%3Cpath d='M18 17h28v7H18zm0 13h20v6H18zm0 12h28v6H18z' fill='%23fff'/%3E%3C/svg%3E" />
-    <link rel="stylesheet" href="src/styles.css?v=20260531-popover" />
+    <link rel="stylesheet" href="src/styles.css?v=20260615-history-header" />
   </head>
   <body>
     <main class="workspace">
+      <aside id="historySidebar" class="history-sidebar" aria-label="历史记录">
+        <button id="historyToggleBtn" class="history-tab" type="button" title="打开历史记录" aria-label="打开历史记录">
+          <i data-lucide="panel-left-open"></i>
+        </button>
+        <div class="history-drawer">
+          <div class="history-head">
+            <span>历史记录</span>
+            <button id="historyCloseBtn" class="icon-button ghost" type="button" title="收起历史记录" aria-label="收起历史记录">
+              <i data-lucide="panel-left-close"></i>
+            </button>
+          </div>
+          <small class="history-note">自动保存，点击恢复</small>
+          <div id="projectHistory" class="history-list"></div>
+        </div>
+      </aside>
+
       <aside class="editor-panel" aria-label="编辑器">
         <div class="brand-row">
           <div>
@@ -16,6 +32,13 @@
             <p id="pageCount">0 张图片</p>
           </div>
           <div class="brand-actions">
+            <button class="icon-button" id="newProjectBtn" type="button" title="新建图文" aria-label="新建图文">
+              <i data-lucide="plus"></i>
+            </button>
+            <button class="secondary-button header-mode-button" id="headerModeToggleBtn" type="button">
+              <i data-lucide="user-round"></i>
+              每页头像
+            </button>
             <button class="icon-button" id="themeToggleBtn" type="button" title="切换黑白主题" aria-label="切换黑白主题">
               <i data-lucide="palette"></i>
             </button>
@@ -122,7 +145,7 @@
               </div>
             </details>
 
-            <details class="tool-menu">
+            <details class="tool-menu settings-menu">
               <summary class="tool-button" title="设计设置" aria-label="设计设置">
                 <i data-lucide="sliders-horizontal"></i>
               </summary>
@@ -249,6 +272,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@1.8.0/dist/umd/lucide.min.js"></script>
-    <script src="src/app.js?v=20260531-popover"></script>
+    <script src="src/app.js?v=20260615-history-header"></script>
   </body>
 </html>

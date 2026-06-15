@@ -6,6 +6,8 @@ const EXPORT_IMAGE_MIME = "image/png";
 const EXPORT_IMAGE_EXTENSION = ".png";
 const EXPORT_ZIP_COMPRESSION = "STORE";
 const STORAGE_KEY = "graphicTextLayoutState.v1";
+const PROJECTS_STORAGE_KEY = "graphicTextLayoutProjects.v1";
+const MAX_PROJECTS = 24;
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -14,6 +16,12 @@ const els = {
   pages: $("#pages"),
   pageCount: $("#pageCount"),
   status: $("#statusText"),
+  historySidebar: $("#historySidebar"),
+  historyToggle: $("#historyToggleBtn"),
+  historyClose: $("#historyCloseBtn"),
+  newProject: $("#newProjectBtn"),
+  projectHistory: $("#projectHistory"),
+  headerModeToggle: $("#headerModeToggleBtn"),
   themeToggle: $("#themeToggleBtn"),
   downloadZip: $("#downloadZipBtn"),
   rerender: $("#rerenderBtn"),
@@ -173,6 +181,9 @@ const state = {
   colorBrush: false,
   bgColorBrush: false,
   uiTheme: "light",
+  headerMode: "every",
+  currentProjectId: null,
+  projects: [],
 };
 
 const textHistory = {
@@ -207,10 +218,19 @@ function defaultFormState() {
     zhFont: "zh-system",
     enFont: "en-system",
     imageHeight: "520",
+    headerMode: "every",
     uiTheme: "light",
     avatar: sampleAvatar,
     avatarCrop: null,
-    images: state.images,
+    images: defaultImages(),
+  };
+}
+
+function blankFormState() {
+  return {
+    ...defaultFormState(),
+    content: "",
+    images: {},
   };
 }
 
@@ -227,6 +247,7 @@ function readForm() {
     zhFont: FONT_STACKS[els.zhFont.value] ? els.zhFont.value : "zh-system",
     enFont: FONT_STACKS[els.enFont.value] ? els.enFont.value : "en-system",
     imageHeight: clamp(Number(els.imageHeight.value) || 520, 220, 760),
+    headerMode: state.headerMode === "first" ? "first" : "every",
     uiTheme: state.uiTheme,
     avatar: state.avatar,
     avatarCrop: state.avatarCrop,
@@ -246,10 +267,12 @@ function applyForm(data) {
   els.zhFont.value = FONT_STACKS[data.zhFont] ? data.zhFont : "zh-system";
   els.enFont.value = FONT_STACKS[data.enFont] ? data.enFont : "en-system";
   els.imageHeight.value = String(data.imageHeight ?? "520") === "380" ? "520" : data.imageHeight ?? "520";
+  state.headerMode = data.headerMode === "first" ? "first" : "every";
+  updateHeaderModeButton();
   setUiTheme(data.uiTheme || "light", false, true);
   state.avatar = data.avatar || sampleAvatar;
   state.avatarCrop = data.avatarCrop || null;
-  state.images = { ...defaultFormState().images, ...(data.images || {}) };
+  state.images = normalizeImagesForContent(data.content, data.images);
   updateAvatarPreview();
   document.documentElement.style.setProperty("--brush-color", els.inlineColor.value);
   document.documentElement.style.setProperty("--text-bg-brush-color", els.inlineBgColor.value);
@@ -287,6 +310,23 @@ async function toggleUiTheme() {
   els.status.textContent = `已切换为${UI_THEME_LABELS[nextTheme]}主题`;
 }
 
+function updateHeaderModeButton() {
+  if (!els.headerModeToggle) return;
+  const firstOnly = state.headerMode === "first";
+  els.headerModeToggle.classList.toggle("active", firstOnly);
+  els.headerModeToggle.innerHTML = `<i data-lucide="${firstOnly ? "user-round-check" : "user-round"}"></i>${firstOnly ? "仅首页头像" : "每页头像"}`;
+  els.headerModeToggle.title = firstOnly ? "当前仅首页显示头像昵称，点击改为每页显示" : "当前每页显示头像昵称，点击改为仅首页显示";
+  els.headerModeToggle.setAttribute("aria-label", els.headerModeToggle.title);
+  if (window.lucide) window.lucide.createIcons();
+}
+
+async function toggleHeaderMode() {
+  state.headerMode = state.headerMode === "first" ? "every" : "first";
+  updateHeaderModeButton();
+  await render();
+  els.status.textContent = state.headerMode === "first" ? "仅首页显示个人信息" : "每张图片都显示个人信息";
+}
+
 function normalizeHandle(value) {
   const trimmed = (value || "").trim();
   if (!trimmed) return "@profile";
@@ -307,31 +347,207 @@ function debounce(fn, wait = 140) {
 
 function saveState() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(readForm()));
+    const data = readForm();
+    const now = Date.now();
+    let current = state.projects.find((project) => project.id === state.currentProjectId);
+    if (!current) {
+      current = createProject(data);
+      state.currentProjectId = current.id;
+      state.projects.unshift(current);
+    }
+    current.data = data;
+    current.title = projectTitleFromData(data);
+    current.updatedAt = now;
+    state.projects = [
+      current,
+      ...state.projects.filter((project) => project.id !== current.id),
+    ].slice(0, MAX_PROJECTS);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    saveProjectStore();
+    updateProjectHistory();
   } catch {
     els.status.textContent = "本次内容较大，浏览器未写入本地缓存";
   }
 }
 
 function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? migrateStoredState({ ...defaultFormState(), ...JSON.parse(raw) }) : defaultFormState();
-  } catch {
-    return defaultFormState();
-  }
+  const store = loadProjectStore();
+  state.projects = store.projects;
+  state.currentProjectId = store.activeId || store.projects[0]?.id || null;
+  return store.projects.find((project) => project.id === state.currentProjectId)?.data || defaultFormState();
 }
 
 function migrateStoredState(data) {
   const oldBoldQuote =
     "**“请你从某个领域里，选择一个研究生水平的概念。然后写一个寓言故事，用间接的方式把这个概念讲清楚。不要一开始就说答案，尽量到故事快结束的时候，才让人意识到原来讲的是这个概念。故事结束后，再解释这个概念，以及故事里的隐喻分别对应什么。”**";
-  data.content = (data.content || defaultText).replace(
+  if (typeof data.content !== "string") data.content = defaultText;
+  data.content = data.content.replace(
     oldBoldQuote,
     "“请你从某个领域里，选择一个研究生水平的概念。然后写一个寓言故事，用间接的方式把这个概念讲清楚。不要一开始就说答案，尽量到故事快结束的时候，才让人意识到原来讲的是这个概念。故事结束后，再解释这个概念，以及故事里的隐喻分别对应什么。”",
   );
   if (String(data.imageHeight) === "380") data.imageHeight = "520";
   if (Number(data.lineHeight) <= 1.65) data.lineHeight = "1.85";
+  data.headerMode = data.headerMode === "first" ? "first" : "every";
+  data.images = normalizeImagesForContent(data.content, data.images);
   return data;
+}
+
+function defaultImages() {
+  return {
+    sample: {
+      src: sampleImage,
+      name: "sample",
+    },
+  };
+}
+
+function normalizeImagesForContent(content, images) {
+  const nextImages = images && typeof images === "object" ? { ...images } : {};
+  if (String(content || "").includes("[[image:sample]]") && !nextImages.sample) {
+    nextImages.sample = defaultImages().sample;
+  }
+  return nextImages;
+}
+
+function createProject(data = defaultFormState()) {
+  const normalized = migrateStoredState({ ...defaultFormState(), ...data });
+  const now = Date.now();
+  return {
+    id: `project_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+    title: projectTitleFromData(normalized),
+    updatedAt: now,
+    data: normalized,
+  };
+}
+
+function loadProjectStore() {
+  try {
+    const raw = localStorage.getItem(PROJECTS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const projects = Array.isArray(parsed.projects)
+        ? parsed.projects.map(normalizeProject).filter(Boolean).slice(0, MAX_PROJECTS)
+        : [];
+      if (projects.length) {
+        return {
+          activeId: projects.some((project) => project.id === parsed.activeId) ? parsed.activeId : projects[0].id,
+          projects,
+        };
+      }
+    }
+
+    const legacyRaw = localStorage.getItem(STORAGE_KEY);
+    const legacyData = legacyRaw ? JSON.parse(legacyRaw) : defaultFormState();
+    const project = createProject(legacyData);
+    return { activeId: project.id, projects: [project] };
+  } catch {
+    const project = createProject(defaultFormState());
+    return { activeId: project.id, projects: [project] };
+  }
+}
+
+function normalizeProject(project) {
+  if (!project || typeof project !== "object") return null;
+  const data = migrateStoredState({ ...defaultFormState(), ...(project.data || {}) });
+  const updatedAt = Number(project.updatedAt) || Date.now();
+  return {
+    id: project.id || `project_${updatedAt.toString(36)}`,
+    title: project.title || projectTitleFromData(data),
+    updatedAt,
+    data,
+  };
+}
+
+function saveProjectStore() {
+  localStorage.setItem(
+    PROJECTS_STORAGE_KEY,
+    JSON.stringify({
+      activeId: state.currentProjectId,
+      projects: state.projects.slice(0, MAX_PROJECTS),
+    }),
+  );
+}
+
+function projectTitleFromData(data) {
+  const contentLine = String(data.content || "")
+    .split("\n")
+    .map((line) => line.replace(/^\s*#+\s*/, "").trim())
+    .find((line) => line && !line.startsWith("[[image:"));
+  return (contentLine || data.displayName || "未命名图文").slice(0, 24);
+}
+
+function formatProjectTime(time) {
+  const date = new Date(time);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function updateProjectHistory() {
+  if (!els.projectHistory) return;
+  els.projectHistory.innerHTML = "";
+
+  for (const project of state.projects) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "history-item";
+    button.classList.toggle("active", project.id === state.currentProjectId);
+    button.dataset.projectId = project.id;
+    button.innerHTML = `
+      <span>${escapeHtml(project.title || "未命名图文")}</span>
+      <small>${formatProjectTime(project.updatedAt)}</small>
+    `;
+    button.addEventListener("click", () => openProject(project.id));
+    els.projectHistory.append(button);
+  }
+}
+
+function setHistoryOpen(open) {
+  if (!els.historySidebar) return;
+  els.historySidebar.classList.toggle("open", open);
+  els.historyToggle?.setAttribute("aria-label", open ? "收起历史记录" : "打开历史记录");
+  els.historyToggle?.setAttribute("title", open ? "收起历史记录" : "打开历史记录");
+}
+
+function toggleHistory() {
+  setHistoryOpen(!els.historySidebar?.classList.contains("open"));
+}
+
+async function openProject(projectId) {
+  if (!projectId || projectId === state.currentProjectId) return;
+  saveState();
+  const project = state.projects.find((item) => item.id === projectId);
+  if (!project) return;
+  state.currentProjectId = project.id;
+  state.scrollOffset = 0;
+  applyForm(project.data);
+  resetTextHistory();
+  updateProjectHistory();
+  await render();
+  els.status.textContent = `已打开：${project.title || "未命名图文"}`;
+}
+
+async function createNewProject() {
+  saveState();
+  const project = createProject(blankFormState());
+  state.projects = [project, ...state.projects.filter((item) => item.id !== project.id)].slice(0, MAX_PROJECTS);
+  state.currentProjectId = project.id;
+  state.mode = "auto";
+  state.scrollOffset = 0;
+  applyForm(project.data);
+  resetTextHistory();
+  updateProjectHistory();
+  await render();
+  els.status.textContent = "已新建图文，上一条已保存在历史记录";
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[char]);
 }
 
 function getTextSnapshot() {
@@ -1354,6 +1570,15 @@ function normalizeImageLayout(layout = {}) {
   };
 }
 
+function contentBoundsForHeader(showHeader) {
+  return {
+    left: CARD_SIDE_PADDING,
+    right: CANVAS_WIDTH - CARD_SIDE_PADDING,
+    top: showHeader ? 158 : CARD_SIDE_PADDING,
+    bottom: CANVAS_HEIGHT - 62,
+  };
+}
+
 async function buildPages(settings) {
   const measureCanvas = document.createElement("canvas");
   const ctx = measureCanvas.getContext("2d");
@@ -1362,22 +1587,20 @@ async function buildPages(settings) {
   const badge = await loadImage(verifiedBadgeSrc).catch(() => null);
   const imageCache = {};
   const pages = [];
-  const bounds = {
-    left: 42,
-    right: CANVAS_WIDTH - 42,
-    top: 158,
-    bottom: CANVAS_HEIGHT - 62,
-  };
-  const contentWidth = bounds.right - bounds.left;
   let page = createPage();
-  let y = bounds.top;
+  const contentWidth = page.bounds.right - page.bounds.left;
+  let y = page.bounds.top;
   let hasContent = false;
 
   function createPage() {
+    const showHeader = settings.headerMode !== "first" || pages.length === 0;
+    const bounds = contentBoundsForHeader(showHeader);
     return {
       avatar,
       badge,
       settings,
+      showHeader,
+      bounds,
       items: [],
     };
   }
@@ -1387,12 +1610,12 @@ async function buildPages(settings) {
       pages.push(page);
     }
     page = createPage();
-    y = bounds.top;
+    y = page.bounds.top;
     hasContent = false;
   }
 
   function ensureSpace(height, topMargin = 0) {
-    if (hasContent && y + topMargin + height > bounds.bottom) {
+    if (hasContent && y + topMargin + height > page.bounds.bottom) {
       finishPage();
     }
     if (!hasContent) topMargin = 0;
@@ -1409,7 +1632,7 @@ async function buildPages(settings) {
       const img = imageCache[block.id];
       if (!img) continue;
       const sourceRect = getImageSourceRect(img, data.crop);
-      const size = imageBlockSize(sourceRect, contentWidth, Math.min(settings.imageHeight, bounds.bottom - bounds.top), data.layout);
+      const size = imageBlockSize(sourceRect, contentWidth, Math.min(settings.imageHeight, page.bounds.bottom - page.bounds.top), data.layout);
       const height = size.height;
       ensureSpace(height, hasContent ? 24 : 0);
       page.items.push({
@@ -1419,7 +1642,7 @@ async function buildPages(settings) {
         sourceRect,
         baseWidth: size.baseWidth,
         maxWidth: size.maxWidth,
-        x: bounds.left + size.offsetX,
+        x: page.bounds.left + size.offsetX,
         y,
         width: size.width,
         height,
@@ -1444,7 +1667,7 @@ async function buildPages(settings) {
         blockType: block.type,
         line,
         style,
-        x: bounds.left + (style.quote ? 28 : 0),
+        x: page.bounds.left + (style.quote ? 28 : 0),
         y,
         lineHeight,
       });
@@ -1469,18 +1692,14 @@ async function buildScrollPage(settings) {
   const avatar = await loadImage(settings.avatar).catch(() => null);
   const badge = await loadImage(verifiedBadgeSrc).catch(() => null);
   const imageCache = {};
-  const bounds = {
-    left: 42,
-    right: CANVAS_WIDTH - 42,
-    top: 158,
-    bottom: CANVAS_HEIGHT - 62,
-  };
+  const bounds = contentBoundsForHeader(true);
   const contentWidth = bounds.right - bounds.left;
   const viewportHeight = bounds.bottom - bounds.top;
   const page = {
     avatar,
     badge,
     settings,
+    showHeader: true,
     items: [],
     bounds,
     scrollOffset: 0,
@@ -1587,7 +1806,9 @@ function renderScrollPage(page) {
 
 function drawPageToContext(ctx, page, scrollPage = false) {
   drawBackground(ctx, page.settings);
-  drawHeader(ctx, page.settings, page.avatar, page.badge);
+  if (page.showHeader !== false) {
+    drawHeader(ctx, page.settings, page.avatar, page.badge);
+  }
 
   if (!scrollPage) {
     for (const item of page.items) {
@@ -1609,12 +1830,14 @@ function drawPageToContext(ctx, page, scrollPage = false) {
   }
   ctx.restore();
 
-  ctx.strokeStyle = isDarkHexColor(page.settings.bgColor) ? "rgba(255,255,255,.12)" : "rgba(23,32,47,.06)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(bounds.left, bounds.top - 10);
-  ctx.lineTo(bounds.right, bounds.top - 10);
-  ctx.stroke();
+  if (page.showHeader !== false) {
+    ctx.strokeStyle = isDarkHexColor(page.settings.bgColor) ? "rgba(255,255,255,.12)" : "rgba(23,32,47,.06)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(bounds.left, bounds.top - 10);
+    ctx.lineTo(bounds.right, bounds.top - 10);
+    ctx.stroke();
+  }
 }
 
 function collectTextHits(ctx, page, scrollPage = false) {
@@ -2268,6 +2491,7 @@ function positionOpenToolPopovers() {
 function bindEvents() {
   document.querySelectorAll(".tool-menu").forEach((menu) => {
     const summary = menu.querySelector("summary");
+    const popover = menu.querySelector(".tool-popover");
     summary?.addEventListener("click", () => {
       if (menu.open) return;
       document.querySelectorAll(".tool-menu").forEach((other) => {
@@ -2281,6 +2505,11 @@ function bindEvents() {
       });
       requestAnimationFrame(() => positionToolPopover(menu));
     });
+    if (menu.classList.contains("settings-menu")) {
+      popover?.addEventListener("mouseleave", () => {
+        menu.open = false;
+      });
+    }
   });
 
   window.addEventListener("resize", positionOpenToolPopovers);
@@ -2361,6 +2590,10 @@ function bindEvents() {
   els.findNext.addEventListener("click", findNext);
   els.replaceOne.addEventListener("click", replaceCurrent);
   els.replaceAll.addEventListener("click", replaceAll);
+  els.historyToggle.addEventListener("click", toggleHistory);
+  els.historyClose.addEventListener("click", () => setHistoryOpen(false));
+  els.newProject.addEventListener("click", createNewProject);
+  els.headerModeToggle.addEventListener("click", toggleHeaderMode);
   els.themeToggle.addEventListener("click", toggleUiTheme);
   els.rerender.addEventListener("click", render);
   els.downloadZip.addEventListener("click", downloadAll);
@@ -2368,6 +2601,7 @@ function bindEvents() {
 
 applyForm(loadState());
 resetTextHistory();
+updateProjectHistory();
 bindEvents();
 render();
 
