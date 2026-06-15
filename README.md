@@ -7,13 +7,17 @@
 
 ## 预览
 
-### 图文卡片
+### 图文卡片：每页显示头像
 
-![图文卡片预览](docs/screenshots/auto-layout-provided.png)
+![图文卡片预览](docs/screenshots/cards-mode.png)
 
-### 滑动截图
+### 图文卡片：仅首页显示头像
 
-![滑动截图预览](docs/screenshots/scroll-mode-provided.png)
+![仅首页显示头像的图文卡片预览](docs/screenshots/cards-first-header-mode.png)
+
+### 公众号长文
+
+![公众号长文预览](docs/screenshots/article-mode.png)
 
 ## 核心功能
 
