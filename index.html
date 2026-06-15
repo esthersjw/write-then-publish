@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>写了就发</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2317202f'/%3E%3Cpath d='M18 17h28v7H18zm0 13h20v6H18zm0 12h28v6H18z' fill='%23fff'/%3E%3C/svg%3E" />
-    <link rel="stylesheet" href="src/styles.css?v=20260615-history-header" />
+    <link rel="stylesheet" href="src/styles.css?v=20260615-convert-mode" />
   </head>
   <body>
     <main class="workspace">
@@ -21,6 +21,11 @@
             </button>
           </div>
           <small class="history-note">自动保存，点击恢复</small>
+          <div class="history-filter" aria-label="历史记录筛选">
+            <button type="button" class="active" data-history-filter="all">全部</button>
+            <button type="button" data-history-filter="cards">图文</button>
+            <button type="button" data-history-filter="article">长文</button>
+          </div>
           <div id="projectHistory" class="history-list"></div>
         </div>
       </aside>
@@ -31,9 +36,17 @@
             <h1>写了就发</h1>
             <p id="pageCount">0 张图片</p>
           </div>
+          <div class="mode-switch" aria-label="切换工作区">
+            <button type="button" class="active" data-app-mode="cards">图文卡片</button>
+            <button type="button" data-app-mode="article">公众号长文</button>
+          </div>
           <div class="brand-actions">
             <button class="icon-button" id="newProjectBtn" type="button" title="新建图文" aria-label="新建图文">
               <i data-lucide="plus"></i>
+            </button>
+            <button class="secondary-button convert-mode-button" id="convertModeBtn" type="button">
+              <i data-lucide="repeat-2"></i>
+              <span>转长文</span>
             </button>
             <button class="secondary-button header-mode-button" id="headerModeToggleBtn" type="button">
               <i data-lucide="user-round"></i>
@@ -223,7 +236,47 @@
             </button>
           </div>
         </div>
-        <div id="pages" class="pages"></div>
+        <div class="preview-body">
+          <div id="pages" class="pages"></div>
+          <aside id="articleSettings" class="article-settings" aria-label="公众号长文设置" hidden>
+            <section>
+              <h3>主题</h3>
+              <div class="article-option-grid">
+                <button type="button" class="article-option active" data-article-theme="classic">经典</button>
+                <button type="button" class="article-option" data-article-theme="elegant">优雅</button>
+                <button type="button" class="article-option" data-article-theme="clean">简洁</button>
+                <button type="button" class="article-option" data-article-theme="wechat">微信绿</button>
+                <button type="button" class="article-option" data-article-theme="colorful">多彩微信</button>
+              </div>
+            </section>
+            <section>
+              <h3>字体</h3>
+              <div class="article-option-grid three">
+                <button type="button" class="article-option active" data-article-font="sans">无衬线</button>
+                <button type="button" class="article-option" data-article-font="serif">衬线</button>
+                <button type="button" class="article-option" data-article-font="mono">等宽</button>
+              </div>
+            </section>
+            <section>
+              <h3>字号</h3>
+              <div class="article-option-grid">
+                <button type="button" class="article-option" data-article-size="small">更小</button>
+                <button type="button" class="article-option active" data-article-size="normal">推荐</button>
+                <button type="button" class="article-option" data-article-size="large">稍大</button>
+              </div>
+            </section>
+            <section>
+              <h3>主题色</h3>
+              <div class="article-color-grid">
+                <button type="button" class="article-color active" data-article-color="#0f766e" style="--swatch:#0f766e">翡翠绿</button>
+                <button type="button" class="article-color" data-article-color="#2563eb" style="--swatch:#2563eb">经典蓝</button>
+                <button type="button" class="article-color" data-article-color="#ef4444" style="--swatch:#ef4444">活力橘</button>
+                <button type="button" class="article-color" data-article-color="#7c3aed" style="--swatch:#7c3aed">薰衣紫</button>
+                <button type="button" class="article-color" data-article-color="#111827" style="--swatch:#111827">石墨黑</button>
+              </div>
+            </section>
+          </aside>
+        </div>
       </section>
     </main>
 
@@ -272,6 +325,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@1.8.0/dist/umd/lucide.min.js"></script>
-    <script src="src/app.js?v=20260615-history-header"></script>
+    <script src="src/app.js?v=20260615-convert-mode"></script>
   </body>
 </html>

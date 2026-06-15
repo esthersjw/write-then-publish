@@ -21,11 +21,19 @@ const els = {
   historyClose: $("#historyCloseBtn"),
   newProject: $("#newProjectBtn"),
   projectHistory: $("#projectHistory"),
+  historyFilterButtons: document.querySelectorAll("[data-history-filter]"),
+  modeButtons: document.querySelectorAll(".mode-switch [data-app-mode]"),
+  convertMode: $("#convertModeBtn"),
   headerModeToggle: $("#headerModeToggleBtn"),
   themeToggle: $("#themeToggleBtn"),
   downloadZip: $("#downloadZipBtn"),
   rerender: $("#rerenderBtn"),
   scrollMode: $("#scrollModeBtn"),
+  articleSettings: $("#articleSettings"),
+  articleThemeButtons: document.querySelectorAll("[data-article-theme]"),
+  articleFontButtons: document.querySelectorAll("[data-article-font]"),
+  articleSizeButtons: document.querySelectorAll("[data-article-size]"),
+  articleColorButtons: document.querySelectorAll("[data-article-color]"),
   contentImage: $("#contentImageInput"),
   inlineColor: $("#inlineColorInput"),
   inlineBgColor: $("#inlineBgColorInput"),
@@ -182,8 +190,14 @@ const state = {
   bgColorBrush: false,
   uiTheme: "light",
   headerMode: "every",
+  appMode: "cards",
+  articleTheme: "wechat",
+  articleFont: "sans",
+  articleSize: "normal",
+  articleColor: "#0f766e",
   currentProjectId: null,
   projects: [],
+  historyFilter: "all",
 };
 
 const textHistory = {
@@ -219,6 +233,11 @@ function defaultFormState() {
     enFont: "en-system",
     imageHeight: "520",
     headerMode: "every",
+    appMode: "cards",
+    articleTheme: "wechat",
+    articleFont: "sans",
+    articleSize: "normal",
+    articleColor: "#0f766e",
     uiTheme: "light",
     avatar: sampleAvatar,
     avatarCrop: null,
@@ -248,6 +267,11 @@ function readForm() {
     enFont: FONT_STACKS[els.enFont.value] ? els.enFont.value : "en-system",
     imageHeight: clamp(Number(els.imageHeight.value) || 520, 220, 760),
     headerMode: state.headerMode === "first" ? "first" : "every",
+    appMode: state.appMode === "article" ? "article" : "cards",
+    articleTheme: normalizeArticleTheme(state.articleTheme),
+    articleFont: normalizeArticleFont(state.articleFont),
+    articleSize: normalizeArticleSize(state.articleSize),
+    articleColor: normalizeArticleColor(state.articleColor),
     uiTheme: state.uiTheme,
     avatar: state.avatar,
     avatarCrop: state.avatarCrop,
@@ -268,7 +292,14 @@ function applyForm(data) {
   els.enFont.value = FONT_STACKS[data.enFont] ? data.enFont : "en-system";
   els.imageHeight.value = String(data.imageHeight ?? "520") === "380" ? "520" : data.imageHeight ?? "520";
   state.headerMode = data.headerMode === "first" ? "first" : "every";
+  state.appMode = data.appMode === "article" ? "article" : "cards";
+  state.articleTheme = normalizeArticleTheme(data.articleTheme);
+  state.articleFont = normalizeArticleFont(data.articleFont);
+  state.articleSize = normalizeArticleSize(data.articleSize);
+  state.articleColor = normalizeArticleColor(data.articleColor);
+  updateAppMode();
   updateHeaderModeButton();
+  updateArticleControls();
   setUiTheme(data.uiTheme || "light", false, true);
   state.avatar = data.avatar || sampleAvatar;
   state.avatarCrop = data.avatarCrop || null;
@@ -327,10 +358,76 @@ async function toggleHeaderMode() {
   els.status.textContent = state.headerMode === "first" ? "仅首页显示个人信息" : "每张图片都显示个人信息";
 }
 
+function updateAppMode() {
+  document.body.dataset.appMode = state.appMode;
+  els.modeButtons.forEach((button) => {
+    const active = button.dataset.appMode === state.appMode;
+    button.classList.toggle("active", active);
+  });
+  const targetMode = state.appMode === "article" ? "cards" : "article";
+  const targetLabel = targetMode === "article" ? "转长文" : "转图文";
+  els.convertMode.dataset.targetMode = targetMode;
+  els.convertMode.setAttribute("aria-label", targetLabel);
+  els.convertMode.setAttribute("title", targetMode === "article" ? "将当前内容转为公众号长文" : "将当前内容自动分页为图文卡片");
+  els.convertMode.querySelector("span").textContent = targetLabel;
+  els.articleSettings.hidden = state.appMode !== "article";
+  els.scrollMode.hidden = state.appMode === "article";
+  els.rerender.hidden = state.appMode === "article";
+  els.downloadZip.hidden = state.appMode === "article";
+  els.headerModeToggle.hidden = state.appMode === "article";
+}
+
+async function setAppMode(mode) {
+  const nextMode = mode === "article" ? "article" : "cards";
+  if (state.appMode === nextMode) return;
+  state.appMode = nextMode;
+  state.scrollOffset = 0;
+  updateAppMode();
+  await render();
+}
+
+async function convertCurrentMode() {
+  const nextMode = state.appMode === "article" ? "cards" : "article";
+  await setAppMode(nextMode);
+  els.status.textContent = nextMode === "article" ? "已转为公众号长文" : "已转为图文卡片，并自动分页排版";
+}
+
+function updateArticleControls() {
+  els.articleThemeButtons.forEach((button) => button.classList.toggle("active", button.dataset.articleTheme === state.articleTheme));
+  els.articleFontButtons.forEach((button) => button.classList.toggle("active", button.dataset.articleFont === state.articleFont));
+  els.articleSizeButtons.forEach((button) => button.classList.toggle("active", button.dataset.articleSize === state.articleSize));
+  els.articleColorButtons.forEach((button) => button.classList.toggle("active", button.dataset.articleColor?.toLowerCase() === state.articleColor.toLowerCase()));
+}
+
+async function setArticleOption(type, value) {
+  if (type === "theme") state.articleTheme = normalizeArticleTheme(value);
+  if (type === "font") state.articleFont = normalizeArticleFont(value);
+  if (type === "size") state.articleSize = normalizeArticleSize(value);
+  if (type === "color") state.articleColor = normalizeArticleColor(value);
+  updateArticleControls();
+  await render();
+}
+
 function normalizeHandle(value) {
   const trimmed = (value || "").trim();
   if (!trimmed) return "@profile";
   return trimmed.startsWith("@") ? trimmed : `@${trimmed}`;
+}
+
+function normalizeArticleTheme(value) {
+  return ["classic", "elegant", "clean", "wechat", "colorful"].includes(value) ? value : "wechat";
+}
+
+function normalizeArticleFont(value) {
+  return ["sans", "serif", "mono"].includes(value) ? value : "sans";
+}
+
+function normalizeArticleSize(value) {
+  return ["small", "normal", "large"].includes(value) ? value : "normal";
+}
+
+function normalizeArticleColor(value) {
+  return /^#[0-9a-fA-F]{6}$/.test(String(value || "")) ? value : "#0f766e";
 }
 
 function clamp(value, min, max) {
@@ -388,6 +485,11 @@ function migrateStoredState(data) {
   if (String(data.imageHeight) === "380") data.imageHeight = "520";
   if (Number(data.lineHeight) <= 1.65) data.lineHeight = "1.85";
   data.headerMode = data.headerMode === "first" ? "first" : "every";
+  data.appMode = data.appMode === "article" ? "article" : "cards";
+  data.articleTheme = normalizeArticleTheme(data.articleTheme);
+  data.articleFont = normalizeArticleFont(data.articleFont);
+  data.articleSize = normalizeArticleSize(data.articleSize);
+  data.articleColor = normalizeArticleColor(data.articleColor);
   data.images = normalizeImagesForContent(data.content, data.images);
   return data;
 }
@@ -482,23 +584,60 @@ function formatProjectTime(time) {
   return `${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+function projectType(project) {
+  return project?.data?.appMode === "article" ? "article" : "cards";
+}
+
+function projectTypeLabel(type) {
+  return type === "article" ? "长文" : "图文";
+}
+
 function updateProjectHistory() {
   if (!els.projectHistory) return;
   els.projectHistory.innerHTML = "";
+  els.historyFilterButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.historyFilter === state.historyFilter);
+  });
 
-  for (const project of state.projects) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "history-item";
-    button.classList.toggle("active", project.id === state.currentProjectId);
-    button.dataset.projectId = project.id;
-    button.innerHTML = `
-      <span>${escapeHtml(project.title || "未命名图文")}</span>
-      <small>${formatProjectTime(project.updatedAt)}</small>
-    `;
-    button.addEventListener("click", () => openProject(project.id));
-    els.projectHistory.append(button);
+  const visibleProjects = state.projects.filter((project) => {
+    if (state.historyFilter === "all") return true;
+    return projectType(project) === state.historyFilter;
+  });
+
+  if (!visibleProjects.length) {
+    const empty = document.createElement("div");
+    empty.className = "history-empty";
+    empty.textContent = state.historyFilter === "article" ? "暂无长文记录" : state.historyFilter === "cards" ? "暂无图文记录" : "暂无历史记录";
+    els.projectHistory.append(empty);
+    return;
   }
+
+  for (const project of visibleProjects) {
+    const type = projectType(project);
+    const item = document.createElement("div");
+    item.className = "history-item";
+    item.classList.toggle("active", project.id === state.currentProjectId);
+    item.dataset.projectType = type;
+    item.dataset.projectId = project.id;
+    item.innerHTML = `
+      <button type="button" class="history-open">
+        <span>${escapeHtml(project.title || "未命名图文")}</span>
+        <small><b>${projectTypeLabel(type)}</b>${formatProjectTime(project.updatedAt)}</small>
+      </button>
+      <button type="button" class="history-delete" title="删除历史记录" aria-label="删除 ${escapeHtml(project.title || "未命名图文")}">
+        <i data-lucide="trash-2"></i>
+      </button>
+    `;
+    item.querySelector(".history-open").addEventListener("click", () => openProject(project.id));
+    item.querySelector(".history-delete").addEventListener("click", () => deleteProject(project.id));
+    els.projectHistory.append(item);
+  }
+  if (window.lucide) window.lucide.createIcons();
+}
+
+function setHistoryFilter(filter) {
+  state.historyFilter = ["all", "cards", "article"].includes(filter) ? filter : "all";
+  updateProjectHistory();
 }
 
 function setHistoryOpen(open) {
@@ -524,6 +663,46 @@ async function openProject(projectId) {
   updateProjectHistory();
   await render();
   els.status.textContent = `已打开：${project.title || "未命名图文"}`;
+}
+
+async function deleteProject(projectId) {
+  const project = state.projects.find((item) => item.id === projectId);
+  if (!project) return;
+  const deletingCurrent = project.id === state.currentProjectId;
+  state.projects = state.projects.filter((item) => item.id !== project.id);
+
+  if (!state.projects.length) {
+    const nextProject = createProject(blankFormState());
+    state.projects = [nextProject];
+    state.currentProjectId = nextProject.id;
+    state.mode = "auto";
+    state.scrollOffset = 0;
+    applyForm(nextProject.data);
+    resetTextHistory();
+    saveProjectStore();
+    updateProjectHistory();
+    await render();
+    els.status.textContent = "已删除历史记录，并新建空白图文";
+    return;
+  }
+
+  if (deletingCurrent) {
+    const nextProject = state.projects[0];
+    state.currentProjectId = nextProject.id;
+    state.mode = "auto";
+    state.scrollOffset = 0;
+    applyForm(nextProject.data);
+    resetTextHistory();
+    saveProjectStore();
+    updateProjectHistory();
+    await render();
+    els.status.textContent = `已删除并打开：${nextProject.title || "未命名图文"}`;
+    return;
+  }
+
+  saveProjectStore();
+  updateProjectHistory();
+  els.status.textContent = `已删除：${project.title || "未命名图文"}`;
 }
 
 async function createNewProject() {
@@ -2062,8 +2241,134 @@ function clampText(ctx, text, maxWidth) {
   return `${result}...`;
 }
 
+function renderArticlePreview(settings) {
+  state.canvases = [];
+  state.scrollOffset = 0;
+  state.scrollMax = 0;
+  els.pages.innerHTML = "";
+  els.pages.className = "pages article-mode";
+  els.articleSettings.hidden = false;
+
+  const article = document.createElement("article");
+  article.className = `article-preview article-theme-${settings.articleTheme} article-font-${settings.articleFont} article-size-${settings.articleSize}`;
+  article.style.setProperty("--article-accent", settings.articleColor);
+  article.innerHTML = markdownToArticleHtml(settings.content, settings.images);
+  els.pages.append(article);
+
+  const wordCount = settings.content.replace(/\s/g, "").length;
+  els.pageCount.textContent = "公众号长文";
+  els.status.textContent = `已生成公众号长文预览，约 ${wordCount} 字`;
+  if (window.lucide) window.lucide.createIcons();
+}
+
+function markdownToArticleHtml(markdown, images = {}) {
+  const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+  const html = [];
+  let paragraph = [];
+  let list = [];
+  let code = [];
+  let inCode = false;
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    html.push(`<p>${renderArticleInline(paragraph.join(" "))}</p>`);
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!list.length) return;
+    html.push(`<ul>${list.map((item) => `<li>${renderArticleInline(item)}</li>`).join("")}</ul>`);
+    list = [];
+  };
+  const flushCode = () => {
+    if (!code.length) return;
+    html.push(`<pre><code>${escapeHtml(code.join("\n"))}</code></pre>`);
+    code = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("```")) {
+      if (inCode) {
+        flushCode();
+        inCode = false;
+      } else {
+        flushParagraph();
+        flushList();
+        inCode = true;
+      }
+      continue;
+    }
+    if (inCode) {
+      code.push(line);
+      continue;
+    }
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const imageMatch = trimmed.match(/^\[\[image:([\w-]+)\]\]$/);
+    if (imageMatch) {
+      flushParagraph();
+      flushList();
+      const image = images[imageMatch[1]];
+      if (image?.src) html.push(`<figure><img src="${escapeAttribute(image.src)}" alt="${escapeAttribute(image.name || "图片")}" /></figure>`);
+      continue;
+    }
+
+    const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      const level = heading[1].length;
+      html.push(`<h${level}>${renderArticleInline(heading[2])}</h${level}>`);
+      continue;
+    }
+
+    if (trimmed.startsWith("> ")) {
+      flushParagraph();
+      flushList();
+      html.push(`<blockquote>${renderArticleInline(trimmed.slice(2))}</blockquote>`);
+      continue;
+    }
+
+    const listMatch = trimmed.match(/^[-*]\s+(.+)$/);
+    if (listMatch) {
+      flushParagraph();
+      list.push(listMatch[1]);
+      continue;
+    }
+
+    paragraph.push(trimmed);
+  }
+
+  flushParagraph();
+  flushList();
+  flushCode();
+  return html.length ? html.join("") : '<p class="article-empty">在左侧输入 Markdown，右侧会生成公众号长文预览。</p>';
+}
+
+function renderArticleInline(text) {
+  return escapeHtml(text)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(value).replace(/`/g, "&#96;");
+}
+
 async function render() {
   const settings = readForm();
+  updateAppMode();
+  updateArticleControls();
+  if (state.appMode === "article") {
+    renderArticlePreview(settings);
+    saveState();
+    return;
+  }
   if (state.mode === "scroll") {
     const page = await buildScrollPage(settings);
     state.canvases = [renderScrollPage(page)];
@@ -2079,7 +2384,9 @@ async function render() {
 
 function drawPreview(canvases) {
   els.pages.innerHTML = "";
+  els.pages.className = "pages";
   els.pages.classList.toggle("scroll-mode", state.mode === "scroll");
+  els.articleSettings.hidden = true;
   els.scrollMode.classList.toggle("active", state.mode === "scroll");
   if (!canvases.length) {
     const empty = document.createElement("div");
@@ -2518,6 +2825,23 @@ function bindEvents() {
     button.addEventListener("click", () => wrapSelection(button.dataset.format));
   });
 
+  els.modeButtons.forEach((button) => {
+    button.addEventListener("click", (event) => setAppMode(event.currentTarget.dataset.appMode));
+  });
+
+  els.articleThemeButtons.forEach((button) => {
+    button.addEventListener("click", (event) => setArticleOption("theme", event.currentTarget.dataset.articleTheme));
+  });
+  els.articleFontButtons.forEach((button) => {
+    button.addEventListener("click", (event) => setArticleOption("font", event.currentTarget.dataset.articleFont));
+  });
+  els.articleSizeButtons.forEach((button) => {
+    button.addEventListener("click", (event) => setArticleOption("size", event.currentTarget.dataset.articleSize));
+  });
+  els.articleColorButtons.forEach((button) => {
+    button.addEventListener("click", (event) => setArticleOption("color", event.currentTarget.dataset.articleColor));
+  });
+
   els.content.addEventListener("input", () => {
     scheduleTextHistoryCommit();
     requestRender();
@@ -2592,7 +2916,11 @@ function bindEvents() {
   els.replaceAll.addEventListener("click", replaceAll);
   els.historyToggle.addEventListener("click", toggleHistory);
   els.historyClose.addEventListener("click", () => setHistoryOpen(false));
+  els.historyFilterButtons.forEach((button) => {
+    button.addEventListener("click", () => setHistoryFilter(button.dataset.historyFilter));
+  });
   els.newProject.addEventListener("click", createNewProject);
+  els.convertMode.addEventListener("click", convertCurrentMode);
   els.headerModeToggle.addEventListener("click", toggleHeaderMode);
   els.themeToggle.addEventListener("click", toggleUiTheme);
   els.rerender.addEventListener("click", render);
