@@ -9,6 +9,7 @@ const STORAGE_KEY = "graphicTextLayoutState.v1";
 const PROJECTS_STORAGE_KEY = "graphicTextLayoutProjects.v1";
 const PANEL_LAYOUT_STORAGE_KEY = "writeThenPublishPanelLayout.v1";
 const MAX_PROJECTS = 24;
+const BUILT_IN_PROJECT_PREFIX = "guide_";
 const PANEL_LIMITS = {
   history: { min: 210, max: 380, fallback: 260 },
   editor: { min: 360, max: 760, fallback: 500 },
@@ -204,6 +205,7 @@ const state = {
   currentProjectId: null,
   projects: [],
   historyFilter: "all",
+  readOnlyProjectSnapshot: null,
   panelLayout: {
     history: PANEL_LIMITS.history.fallback,
     editor: PANEL_LIMITS.editor.fallback,
@@ -261,6 +263,170 @@ function blankFormState() {
     content: "",
     images: {},
   };
+}
+
+const cardsGuideText = `# 图文卡片说明书
+
+这是一份内置说明书，用来快速看懂图文卡片模式。它不会被修改，也不能删除。
+
+## 适合什么内容
+
+- 小红书图文
+- X 长帖截图
+- 知识卡片
+- 长文拆条
+- 带图片的教程内容
+
+## 基本流程
+
+1. 在左侧输入或粘贴正文。
+2. 使用 H1、H2、加粗、斜体、引用、颜色和文字背景色整理重点。
+3. 点击图片按钮插入正文图片。
+4. 选择“每页头像”或“仅首页头像”。
+5. 在右侧检查分页效果。
+6. 点击单张下载或批量下载。
+
+## 常用写法
+
+用 \`# 标题\` 生成大标题。
+
+用 \`## 小标题\` 生成段落标题。
+
+用 \`**重点文字**\` 加粗。
+
+用 \`*斜体文字*\` 倾斜。
+
+用 \`> 引用内容\` 做引用块。
+
+用颜色刷和背景色刷突出重点。
+
+## 图片规则
+
+插入图片后，编辑框里会出现类似：
+
+\`[[image:img_xxxxx]]\`
+
+这行代表图片位置。你可以把它移动到任意段落之间。
+
+在右侧预览里点击图片，可以调节图片宽度和对齐方式。
+
+## 分页建议
+
+如果某一页太满，优先减少长段落，而不是缩小字号。图文卡片的重点是“读起来不累”，不是把所有字塞进去。
+
+## 头像显示
+
+默认每一页都显示头像、名称和昵称。
+
+如果你只想第一张显示个人信息，点击“仅首页头像”。`;
+
+const articleGuideText = `# 公众号长文说明书
+
+这是一份内置说明书，用来快速看懂公众号长文模式。它不会被修改，也不能删除。
+
+公众号长文模式适合把内容整理成完整文章，而不是拆成多张图。
+
+## 适合什么内容
+
+- 公众号文章草稿
+- Markdown 长文
+- 方法论文章
+- 产品介绍
+- 图文内容沉淀
+
+## 基本流程
+
+1. 切换到“公众号长文”。
+2. 在左侧输入 Markdown 内容。
+3. 在右侧查看长文预览。
+4. 调整主题、字体、字号和主题色。
+5. 需要拆成图文时，点击“转图文”。
+
+## 推荐结构
+
+# 主标题
+
+开头先讲清楚这篇文章解决什么问题。
+
+## 第一部分
+
+用短段落展开观点。每段尽量只讲一件事。
+
+> 可以用引用块放关键判断、金句或提醒。
+
+## 第二部分
+
+中间可以插入图片，辅助说明复杂内容。
+
+## 结尾
+
+最后做总结，给读者一个明确动作。
+
+## Markdown 写法
+
+- \`#\` 一级标题
+- \`##\` 二级标题
+- \`###\` 三级标题
+- \`**文字**\` 加粗
+- \`*文字*\` 斜体
+- \`> 内容\` 引用
+- \`- 内容\` 列表
+- \`[[image:img_xxxxx]]\` 图片
+
+## 和图文模式互转
+
+长文没写完也可以转图文。
+
+图文没排完也可以转长文。
+
+转换只改变排版方式，不会替你重写内容。`;
+
+function builtInGuideProjects() {
+  const cardsData = migrateStoredState({
+    ...defaultFormState(),
+    content: cardsGuideText,
+    appMode: "cards",
+    headerMode: "every",
+    images: {},
+  });
+  const articleData = migrateStoredState({
+    ...defaultFormState(),
+    content: articleGuideText,
+    appMode: "article",
+    images: {},
+  });
+  return [
+    {
+      id: `${BUILT_IN_PROJECT_PREFIX}cards`,
+      title: "图文卡片说明书",
+      updatedAt: 0,
+      data: cardsData,
+      builtIn: true,
+    },
+    {
+      id: `${BUILT_IN_PROJECT_PREFIX}article`,
+      title: "公众号长文说明书",
+      updatedAt: 0,
+      data: articleData,
+      builtIn: true,
+    },
+  ];
+}
+
+function isBuiltInProjectId(projectId) {
+  return String(projectId || "").startsWith(BUILT_IN_PROJECT_PREFIX);
+}
+
+function isBuiltInProject(project) {
+  return Boolean(project?.builtIn || isBuiltInProjectId(project?.id));
+}
+
+function allHistoryProjects() {
+  return [...builtInGuideProjects(), ...state.projects];
+}
+
+function findHistoryProject(projectId) {
+  return allHistoryProjects().find((project) => project.id === projectId) || null;
 }
 
 function readForm() {
@@ -518,6 +684,21 @@ function debounce(fn, wait = 140) {
 function saveState() {
   try {
     const data = readForm();
+    if (isBuiltInProjectId(state.currentProjectId)) {
+      if (state.readOnlyProjectSnapshot === JSON.stringify(data)) {
+        updateProjectHistory();
+        return;
+      }
+      const project = createProject(data);
+      state.currentProjectId = project.id;
+      state.readOnlyProjectSnapshot = null;
+      state.projects = [project, ...state.projects].slice(0, MAX_PROJECTS);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      saveProjectStore();
+      updateProjectHistory();
+      return;
+    }
+
     const now = Date.now();
     let current = state.projects.find((project) => project.id === state.currentProjectId);
     if (!current) {
@@ -544,6 +725,7 @@ function loadState() {
   const store = loadProjectStore();
   state.projects = store.projects;
   state.currentProjectId = store.activeId || store.projects[0]?.id || null;
+  state.readOnlyProjectSnapshot = null;
   return store.projects.find((project) => project.id === state.currentProjectId)?.data || defaultFormState();
 }
 
@@ -623,6 +805,7 @@ function loadProjectStore() {
 
 function normalizeProject(project) {
   if (!project || typeof project !== "object") return null;
+  if (isBuiltInProjectId(project.id)) return null;
   const data = migrateStoredState({ ...defaultFormState(), ...(project.data || {}) });
   const updatedAt = Number(project.updatedAt) || Date.now();
   return {
@@ -638,7 +821,7 @@ function saveProjectStore() {
     PROJECTS_STORAGE_KEY,
     JSON.stringify({
       activeId: state.currentProjectId,
-      projects: state.projects.slice(0, MAX_PROJECTS),
+      projects: state.projects.filter((project) => !isBuiltInProject(project)).slice(0, MAX_PROJECTS),
     }),
   );
 }
@@ -672,7 +855,7 @@ function updateProjectHistory() {
     button.classList.toggle("active", button.dataset.historyFilter === state.historyFilter);
   });
 
-  const visibleProjects = state.projects.filter((project) => {
+  const visibleProjects = allHistoryProjects().filter((project) => {
     if (state.historyFilter === "all") return true;
     return projectType(project) === state.historyFilter;
   });
@@ -687,22 +870,28 @@ function updateProjectHistory() {
 
   for (const project of visibleProjects) {
     const type = projectType(project);
+    const builtIn = isBuiltInProject(project);
     const item = document.createElement("div");
     item.className = "history-item";
+    item.classList.toggle("built-in", builtIn);
     item.classList.toggle("active", project.id === state.currentProjectId);
     item.dataset.projectType = type;
     item.dataset.projectId = project.id;
     item.innerHTML = `
       <button type="button" class="history-open">
         <span>${escapeHtml(project.title || "未命名图文")}</span>
-        <small><b>${projectTypeLabel(type)}</b>${formatProjectTime(project.updatedAt)}</small>
+        <small><b>${builtIn ? "说明" : projectTypeLabel(type)}</b>${builtIn ? projectTypeLabel(type) : formatProjectTime(project.updatedAt)}</small>
       </button>
-      <button type="button" class="history-delete" title="删除历史记录" aria-label="删除 ${escapeHtml(project.title || "未命名图文")}">
-        <i data-lucide="trash-2"></i>
-      </button>
+      ${
+        builtIn
+          ? '<span class="history-lock" title="内置说明书不可修改"><i data-lucide="lock"></i></span>'
+          : `<button type="button" class="history-delete" title="删除历史记录" aria-label="删除 ${escapeHtml(project.title || "未命名图文")}">
+              <i data-lucide="trash-2"></i>
+            </button>`
+      }
     `;
     item.querySelector(".history-open").addEventListener("click", () => openProject(project.id));
-    item.querySelector(".history-delete").addEventListener("click", () => deleteProject(project.id));
+    item.querySelector(".history-delete")?.addEventListener("click", () => deleteProject(project.id));
     els.projectHistory.append(item);
   }
   if (window.lucide) window.lucide.createIcons();
@@ -728,18 +917,26 @@ function toggleHistory() {
 async function openProject(projectId) {
   if (!projectId || projectId === state.currentProjectId) return;
   saveState();
-  const project = state.projects.find((item) => item.id === projectId);
+  const project = findHistoryProject(projectId);
   if (!project) return;
   state.currentProjectId = project.id;
+  state.readOnlyProjectSnapshot = null;
   state.scrollOffset = 0;
   applyForm(project.data);
+  if (isBuiltInProject(project)) {
+    state.readOnlyProjectSnapshot = JSON.stringify(readForm());
+  }
   resetTextHistory();
   updateProjectHistory();
   await render();
-  els.status.textContent = `已打开：${project.title || "未命名图文"}`;
+  els.status.textContent = isBuiltInProject(project) ? `已打开内置说明书：${project.title}` : `已打开：${project.title || "未命名图文"}`;
 }
 
 async function deleteProject(projectId) {
+  if (isBuiltInProjectId(projectId)) {
+    els.status.textContent = "内置说明书不可删除";
+    return;
+  }
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) return;
   const deletingCurrent = project.id === state.currentProjectId;

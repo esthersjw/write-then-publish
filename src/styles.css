@@ -378,6 +378,10 @@ body.resizing-panels textarea {
   color: var(--active-text);
 }
 
+.history-item.built-in {
+  border-style: dashed;
+}
+
 .history-item span,
 .history-item small {
   overflow: hidden;
@@ -462,6 +466,21 @@ body.resizing-panels textarea {
 .history-delete svg {
   width: 16px;
   height: 16px;
+}
+
+.history-lock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  color: currentColor;
+  opacity: 0.5;
+}
+
+.history-lock svg {
+  width: 15px;
+  height: 15px;
 }
 
 .panel-section {
