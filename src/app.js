@@ -207,7 +207,6 @@ const state = {
   currentProjectId: null,
   projects: [],
   historyFilter: "all",
-  readOnlyProjectSnapshot: null,
   panelLayout: {
     history: PANEL_LIMITS.history.fallback,
     editor: PANEL_LIMITS.editor.fallback,
@@ -429,6 +428,39 @@ function allHistoryProjects() {
 
 function findHistoryProject(projectId) {
   return allHistoryProjects().find((project) => project.id === projectId) || null;
+}
+
+function syncGuideReadOnlyMode() {
+  const readOnly = isBuiltInProjectId(state.currentProjectId);
+  document.body.dataset.guideReadonly = readOnly ? "true" : "false";
+  els.content.readOnly = readOnly;
+  els.content.setAttribute("aria-readonly", readOnly ? "true" : "false");
+
+  document
+    .querySelectorAll(
+      ".mode-switch button, #convertModeBtn, #headerModeToggleBtn, #themeToggleBtn, .editor-controls button, .editor-controls input, .editor-controls select, .editor-controls summary",
+    )
+    .forEach((control) => {
+      if (control instanceof HTMLDetailsElement) return;
+      if ("disabled" in control) control.disabled = readOnly;
+      control.setAttribute("aria-disabled", readOnly ? "true" : "false");
+      if (readOnly) {
+        control.dataset.previousTabIndex = control.getAttribute("tabindex") || "";
+        control.setAttribute("tabindex", "-1");
+      } else {
+        const previousTabIndex = control.dataset.previousTabIndex;
+        if (previousTabIndex) {
+          control.setAttribute("tabindex", previousTabIndex);
+        } else {
+          control.removeAttribute("tabindex");
+        }
+        delete control.dataset.previousTabIndex;
+      }
+    });
+
+  if (readOnly) {
+    document.querySelectorAll(".editor-controls details[open]").forEach((details) => details.removeAttribute("open"));
+  }
 }
 
 function readForm() {
@@ -687,16 +719,6 @@ function saveState() {
   try {
     const data = readForm();
     if (isBuiltInProjectId(state.currentProjectId)) {
-      if (state.readOnlyProjectSnapshot === JSON.stringify(data)) {
-        updateProjectHistory();
-        return;
-      }
-      const project = createProject(data);
-      state.currentProjectId = project.id;
-      state.readOnlyProjectSnapshot = null;
-      state.projects = [project, ...state.projects].slice(0, MAX_PROJECTS);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      saveProjectStore();
       updateProjectHistory();
       return;
     }
@@ -727,7 +749,6 @@ function loadState() {
   const store = loadProjectStore();
   state.projects = store.projects;
   state.currentProjectId = store.activeId || store.projects[0]?.id || GUIDE_CARDS_PROJECT_ID;
-  state.readOnlyProjectSnapshot = null;
   return findHistoryProject(state.currentProjectId)?.data || findHistoryProject(GUIDE_CARDS_PROJECT_ID)?.data || defaultFormState();
 }
 
@@ -923,12 +944,10 @@ async function openProject(projectId) {
   const project = findHistoryProject(projectId);
   if (!project) return;
   state.currentProjectId = project.id;
-  state.readOnlyProjectSnapshot = null;
   state.scrollOffset = 0;
   applyForm(project.data);
-  if (isBuiltInProject(project)) {
-    state.readOnlyProjectSnapshot = JSON.stringify(readForm());
-  }
+  syncGuideReadOnlyMode();
+  if (isBuiltInProject(project)) saveProjectStore();
   resetTextHistory();
   updateProjectHistory();
   await render();
@@ -951,7 +970,7 @@ async function deleteProject(projectId) {
     state.mode = "auto";
     state.scrollOffset = 0;
     applyForm(guideProject?.data || defaultFormState());
-    state.readOnlyProjectSnapshot = JSON.stringify(readForm());
+    syncGuideReadOnlyMode();
     resetTextHistory();
     saveProjectStore();
     updateProjectHistory();
@@ -966,6 +985,7 @@ async function deleteProject(projectId) {
     state.mode = "auto";
     state.scrollOffset = 0;
     applyForm(nextProject.data);
+    syncGuideReadOnlyMode();
     resetTextHistory();
     saveProjectStore();
     updateProjectHistory();
@@ -987,6 +1007,7 @@ async function createNewProject() {
   state.mode = "auto";
   state.scrollOffset = 0;
   applyForm(project.data);
+  syncGuideReadOnlyMode();
   resetTextHistory();
   updateProjectHistory();
   await render();
@@ -3225,9 +3246,7 @@ loadPanelLayout();
 applyPanelLayout();
 const initialFormState = loadState();
 applyForm(initialFormState);
-if (isBuiltInProjectId(state.currentProjectId)) {
-  state.readOnlyProjectSnapshot = JSON.stringify(readForm());
-}
+syncGuideReadOnlyMode();
 resetTextHistory();
 updateProjectHistory();
 bindEvents();

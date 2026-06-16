@@ -240,6 +240,24 @@ body.resizing-panels textarea {
   padding: 18px;
 }
 
+body[data-guide-readonly="true"] .mode-switch,
+body[data-guide-readonly="true"] .brand-actions button:not(#newProjectBtn),
+body[data-guide-readonly="true"] .editor-controls {
+  pointer-events: none;
+  opacity: 0.52;
+}
+
+body[data-guide-readonly="true"] .editor-textarea {
+  border-style: dashed;
+  color: var(--guide-text);
+  background: var(--guide-bg);
+  cursor: default;
+}
+
+body[data-guide-readonly="true"] .editor-textarea:focus {
+  box-shadow: none;
+}
+
 .brand-row,
 .brand-actions,
 .preview-topbar,
