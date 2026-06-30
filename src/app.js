@@ -2835,10 +2835,25 @@ function markdownToArticleHtml(markdown, images = {}) {
 }
 
 function renderArticleInline(text) {
-  return escapeHtml(text)
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  return parseInline(String(text || ""))
+    .map((token) => {
+      let inner = escapeHtml(token.text).replace(/`([^`]+)`/g, "<code>$1</code>");
+      if (token.bold) inner = `<strong>${inner}</strong>`;
+      if (token.italic) inner = `<em>${inner}</em>`;
+
+      const styles = [];
+      if (token.color) styles.push(`color: ${token.color}`);
+      if (token.bgColor) {
+        styles.push(`background-color: ${token.bgColor}`);
+        styles.push("border-radius: 4px");
+        styles.push("box-decoration-break: clone");
+        styles.push("-webkit-box-decoration-break: clone");
+        styles.push("padding: 0 3px");
+      }
+
+      return styles.length ? `<span style="${escapeAttribute(styles.join("; "))}">${inner}</span>` : inner;
+    })
+    .join("");
 }
 
 function escapeAttribute(value) {
