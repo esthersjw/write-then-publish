@@ -2148,7 +2148,7 @@ function wrapBlockLines(ctx, block, style, maxWidth) {
 }
 
 function blankLineGap(settings) {
-  return Math.max(5, Math.ceil(settings.fontSize * 0.16));
+  return Math.max(18, Math.ceil(settings.fontSize * 0.8));
 }
 
 function measureToken(ctx, token, style) {
