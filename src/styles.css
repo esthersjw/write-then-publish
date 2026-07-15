@@ -115,6 +115,12 @@ button:disabled {
   right: 18px;
   bottom: 14px;
   z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 3px 8px;
+  max-width: min(680px, calc(100vw - 36px));
   padding: 7px 10px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -123,14 +129,23 @@ button:disabled {
   box-shadow: var(--shadow-soft);
   font-size: 12px;
   font-weight: 750;
-  line-height: 1;
+  line-height: 1.35;
   letter-spacing: 0;
 }
 
 .site-credit a {
   color: var(--accent);
-  text-decoration: underline;
+  text-decoration: none;
   text-underline-offset: 2px;
+}
+
+.site-credit a:hover,
+.site-credit a:focus-visible {
+  text-decoration: underline;
+}
+
+.site-credit-source {
+  color: var(--muted);
 }
 
 .history-sidebar,
@@ -1731,6 +1746,7 @@ body[data-app-mode="article"] .profile-inline {
     right: 12px;
     bottom: 10px;
     font-size: 11px;
+    max-width: calc(100vw - 24px);
   }
 
   .panel-resizer {
