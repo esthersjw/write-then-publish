@@ -125,7 +125,12 @@ button:disabled {
   font-weight: 750;
   line-height: 1;
   letter-spacing: 0;
-  pointer-events: none;
+}
+
+.site-credit a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .history-sidebar,

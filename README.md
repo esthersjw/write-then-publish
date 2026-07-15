@@ -1,11 +1,17 @@
 # Esther不二｜写了就发（Write Then Publish）
 
-Esther不二的本地排版编辑器，面向内容创作者。
+面向内容创作者的本地排版编辑器，由 Esther不二二次定制。
 
-作者：Esther不二（@SjwEsther）
+二次定制：Esther不二（@SjwEsther）
 输入一段内容后，可以在「图文卡片」和「长文」之间一键切换：图文自动分页导出图片，长文按文章样式预览排版。
 
 它解决的不是“写作”本身，而是写完之后最麻烦的部分：排版、分版、预览、下载、历史保存和多格式复用。
+
+## 原始出处与致谢
+
+本项目基于 [捏捏番茄的 write-then-publish](https://github.com/fxyadela/write-then-publish) 二次定制与扩展。
+
+原作者：捏捏番茄。此版本新增了个人品牌定制、Obsidian 图文导入、Markdown 实时预览、图片本地媒体库和离线导出等能力。
 
 ## 预览
 
@@ -153,7 +159,7 @@ http://127.0.0.1:5173/
 - 纯前端实现，无需后端服务。
 - 图文卡片使用 Canvas 渲染。
 - 批量下载使用 JSZip 在浏览器内打包。
-- 草稿和历史记录使用浏览器本地存储保存。
+- 草稿和历史记录使用浏览器本地存储保存；图片使用 IndexedDB 本地媒体库保存，避免大图占满缓存。
 - 部署可直接使用 Vercel 静态站点配置。
 
 ## 项目结构
@@ -166,6 +172,9 @@ http://127.0.0.1:5173/
 ├── src
 │   ├── app.js
 │   └── styles.css
+├── vendor
+│   ├── html2canvas.min.js
+│   └── jszip.min.js
 ├── docs
 │   └── screenshots
 └── assets
