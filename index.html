@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Esther不二 | 写了就发</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2317202f'/%3E%3Cpath d='M18 17h28v7H18zm0 13h20v6H18zm0 12h28v6H18z' fill='%23fff'/%3E%3C/svg%3E" />
-    <link rel="stylesheet" href="src/styles.css?v=20260714-obsidian-vault" />
+    <link rel="stylesheet" href="src/styles.css?v=20260714-export-preview" />
   </head>
   <body>
     <main class="workspace">
@@ -100,7 +100,7 @@
                   <span id="obsidianVaultStatus">尚未连接仓库</span>
                 </div>
                 <label>
-                  Obsidian 正文
+                  Obsidian 正文（实时预览）
                   <textarea id="obsidianMarkdownInput" class="obsidian-markdown-input" placeholder="粘贴含 ![[图片.png]] 或 ![](附件/图片.png) 的 Obsidian Markdown…"></textarea>
                 </label>
                 <label id="obsidianDropZone" class="obsidian-drop-zone" tabindex="0">
@@ -248,6 +248,10 @@
                     <input id="lineHeightInput" type="number" min="1" max="2.4" step="0.05" value="1.65" />
                   </label>
                   <label>
+                    空行高度
+                    <input id="blankLineHeightInput" type="number" min="8" max="160" step="2" value="26" />
+                  </label>
+                  <label>
                     中文字体
                     <select id="zhFontInput">
                       <option value="zh-system">苹方 / 系统黑体</option>
@@ -275,6 +279,7 @@
           </div>
         </section>
 
+        <p class="editor-source-note">Obsidian 原文编辑区：改字、回车，或删掉图片引用，右侧都会实时更新。</p>
         <textarea id="contentInput" class="editor-textarea" spellcheck="false"></textarea>
       </aside>
       <button class="panel-resizer" data-panel-resize="editor" type="button" aria-label="拖动调整编辑区宽度"></button>
@@ -293,6 +298,10 @@
             <button id="downloadZipBtn" class="primary-button" type="button">
               <i data-lucide="download"></i>
               批量下载
+            </button>
+            <button id="openImagePreviewBtn" class="secondary-button" type="button" title="逐张放大预览">
+              <i data-lucide="maximize-2"></i>
+              逐张预览
             </button>
             <button id="downloadArticleBtn" class="primary-button" type="button" hidden>
               <i data-lucide="download"></i>
@@ -389,9 +398,31 @@
       </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <div id="imagePreviewModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="imagePreviewTitle">
+      <div class="image-preview-card">
+        <div class="modal-head">
+          <div>
+            <h3 id="imagePreviewTitle">单图预览</h3>
+            <p id="imagePreviewMeta">图片 01</p>
+          </div>
+          <button id="imagePreviewCloseBtn" class="icon-button ghost" type="button" title="关闭" aria-label="关闭预览">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="image-preview-stage">
+          <img id="imagePreviewImage" alt="导出图片预览" />
+        </div>
+        <div class="image-preview-actions">
+          <button id="imagePreviewPreviousBtn" class="secondary-button" type="button"><i data-lucide="chevron-left"></i>上一张</button>
+          <button id="imagePreviewDownloadBtn" class="primary-button" type="button"><i data-lucide="download"></i>保存这张</button>
+          <button id="imagePreviewNextBtn" class="secondary-button" type="button">下一张<i data-lucide="chevron-right"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <script src="vendor/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@1.8.0/dist/umd/lucide.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-    <script src="src/app.js?v=20260714-obsidian-vault-close"></script>
+    <script src="vendor/html2canvas.min.js"></script>
+    <script src="src/app.js?v=20260715-media-storage"></script>
   </body>
 </html>

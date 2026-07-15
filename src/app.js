@@ -8,6 +8,8 @@ const EXPORT_ZIP_COMPRESSION = "STORE";
 const OBSIDIAN_VAULT_DB = "estherBuerObsidianVault";
 const OBSIDIAN_VAULT_STORE = "settings";
 const OBSIDIAN_VAULT_KEY = "directoryHandle";
+const MEDIA_DB = "estherBuerWriteThenPublishMedia";
+const MEDIA_STORE = "media";
 const STORAGE_KEY = "graphicTextLayoutState.sjwesther.v1";
 const PROJECTS_STORAGE_KEY = "graphicTextLayoutProjects.sjwesther.v1";
 const PANEL_LAYOUT_STORAGE_KEY = "writeThenPublishPanelLayout.sjwesther.v1";
@@ -40,6 +42,7 @@ const els = {
   headerModeToggle: $("#headerModeToggleBtn"),
   themeToggle: $("#themeToggleBtn"),
   downloadZip: $("#downloadZipBtn"),
+  openImagePreview: $("#openImagePreviewBtn"),
   downloadArticle: $("#downloadArticleBtn"),
   scrollMode: $("#scrollModeBtn"),
   articleSettings: $("#articleSettings"),
@@ -89,6 +92,7 @@ const els = {
   bgColor: $("#bgColorInput"),
   fontSize: $("#fontSizeInput"),
   lineHeight: $("#lineHeightInput"),
+  blankLineHeight: $("#blankLineHeightInput"),
   zhFont: $("#zhFontInput"),
   enFont: $("#enFontInput"),
   imageHeight: $("#imageHeightInput"),
@@ -100,6 +104,13 @@ const els = {
   cropApply: $("#cropApplyBtn"),
   cropReset: $("#cropResetBtn"),
   ratioButtons: document.querySelectorAll("[data-ratio]"),
+  imagePreviewModal: $("#imagePreviewModal"),
+  imagePreviewImage: $("#imagePreviewImage"),
+  imagePreviewMeta: $("#imagePreviewMeta"),
+  imagePreviewClose: $("#imagePreviewCloseBtn"),
+  imagePreviewPrevious: $("#imagePreviewPreviousBtn"),
+  imagePreviewNext: $("#imagePreviewNextBtn"),
+  imagePreviewDownload: $("#imagePreviewDownloadBtn"),
 };
 
 const legacySampleAvatar =
@@ -224,6 +235,8 @@ const state = {
   articleFont: "sans",
   articleSize: "normal",
   articleColor: "#0f766e",
+  previewIndex: 0,
+  avatarStorageKey: null,
   currentProjectId: null,
   projects: [],
   historyFilter: "all",
@@ -268,6 +281,7 @@ function defaultFormState() {
     bgColor: "#ffffff",
     fontSize: "31",
     lineHeight: "1.65",
+    blankLineHeight: "26",
     zhFont: "zh-system",
     enFont: "en-system",
     imageHeight: "520",
@@ -279,6 +293,7 @@ function defaultFormState() {
     articleColor: "#0f766e",
     uiTheme: "light",
     avatar: sampleAvatar,
+    avatarStorageKey: null,
     avatarCrop: null,
     images: defaultImages(),
   };
@@ -503,6 +518,7 @@ function readForm() {
     bgColor: els.bgColor.value,
     fontSize: clamp(Number(els.fontSize.value) || 31, 24, 40),
     lineHeight: clamp(Number(els.lineHeight.value) || 1.65, 1, 2.4),
+    blankLineHeight: clamp(Number(els.blankLineHeight.value) || 26, 8, 160),
     zhFont: FONT_STACKS[els.zhFont.value] ? els.zhFont.value : "zh-system",
     enFont: FONT_STACKS[els.enFont.value] ? els.enFont.value : "en-system",
     imageHeight: clamp(Number(els.imageHeight.value) || 520, 220, 760),
@@ -514,6 +530,7 @@ function readForm() {
     articleColor: normalizeArticleColor(state.articleColor),
     uiTheme: state.uiTheme,
     avatar: state.avatar,
+    avatarStorageKey: state.avatarStorageKey,
     avatarCrop: state.avatarCrop,
     images: state.images,
   };
@@ -528,6 +545,7 @@ function applyForm(data) {
   els.bgColor.value = data.bgColor ?? "#ffffff";
   els.fontSize.value = data.fontSize ?? "31";
   els.lineHeight.value = data.lineHeight ?? "1.65";
+  els.blankLineHeight.value = data.blankLineHeight ?? "26";
   els.zhFont.value = FONT_STACKS[data.zhFont] ? data.zhFont : "zh-system";
   els.enFont.value = FONT_STACKS[data.enFont] ? data.enFont : "en-system";
   els.imageHeight.value = String(data.imageHeight ?? "520") === "380" ? "520" : data.imageHeight ?? "520";
@@ -543,6 +561,7 @@ function applyForm(data) {
   setUiTheme(data.uiTheme || "light", false, true);
   const isLegacyAvatar = !data.avatar || data.avatar === legacySampleAvatar;
   state.avatar = isLegacyAvatar ? sampleAvatar : data.avatar;
+  state.avatarStorageKey = data.avatarStorageKey || null;
   state.avatarCrop = isLegacyAvatar ? null : data.avatarCrop || null;
   state.images = normalizeImagesForContent(data.content, data.images);
   updateAvatarPreview();
@@ -614,6 +633,7 @@ function updateAppMode() {
   els.articleSettings.hidden = state.appMode !== "article";
   els.scrollMode.hidden = state.appMode === "article";
   els.downloadZip.hidden = state.appMode === "article";
+  els.openImagePreview.hidden = state.appMode === "article";
   els.downloadArticle.hidden = state.appMode !== "article";
   els.headerModeToggle.hidden = state.appMode === "article";
 }
@@ -747,6 +767,96 @@ function debounce(fn, wait = 140) {
   };
 }
 
+function openMediaDatabase() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) {
+      reject(new Error("浏览器不支持图片存储"));
+      return;
+    }
+    const request = window.indexedDB.open(MEDIA_DB, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(MEDIA_STORE)) request.result.createObjectStore(MEDIA_STORE);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function writeMedia(key, value) {
+  const db = await openMediaDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(MEDIA_STORE, "readwrite");
+    transaction.objectStore(MEDIA_STORE).put(value, key);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  });
+}
+
+async function readMedia(key) {
+  if (!key) return null;
+  const db = await openMediaDatabase();
+  return new Promise((resolve, reject) => {
+    const request = db.transaction(MEDIA_STORE, "readonly").objectStore(MEDIA_STORE).get(key);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function mediaKeyForImage(imageId) {
+  return `image:${imageId}`;
+}
+
+async function persistMediaInData(data) {
+  const tasks = [];
+  Object.entries(data.images || {}).forEach(([id, image]) => {
+    if (!image?.src?.startsWith("data:")) return;
+    const storageKey = image.storageKey || mediaKeyForImage(id);
+    image.storageKey = storageKey;
+    tasks.push(writeMedia(storageKey, image.src));
+  });
+  if (data.avatar?.startsWith("data:")) {
+    const storageKey = data.avatarStorageKey || `avatar:${state.currentProjectId || "draft"}`;
+    data.avatarStorageKey = storageKey;
+    state.avatarStorageKey = storageKey;
+    tasks.push(writeMedia(storageKey, data.avatar));
+  }
+  await Promise.all(tasks);
+}
+
+function compactDataForLocalStorage(data) {
+  const images = Object.fromEntries(Object.entries(data.images || {}).map(([id, image]) => {
+    const compact = { ...image };
+    if (String(compact.src || "").startsWith("data:")) delete compact.src;
+    return [id, compact];
+  }));
+  const compact = { ...data, images };
+  if (String(compact.avatar || "").startsWith("data:")) delete compact.avatar;
+  return compact;
+}
+
+async function hydrateProjectMedia(data) {
+  if (!data || isBuiltInProjectId(state.currentProjectId)) return;
+  const tasks = [];
+  Object.values(data.images || {}).forEach((image) => {
+    if (!image?.src && image.storageKey) {
+      tasks.push(readMedia(image.storageKey).then((src) => {
+        if (src) image.src = src;
+      }));
+    }
+  });
+  if (!data.avatar && data.avatarStorageKey) {
+    tasks.push(readMedia(data.avatarStorageKey).then((src) => {
+      if (src) data.avatar = src;
+    }));
+  }
+  try {
+    await Promise.all(tasks);
+  } catch (error) {
+    console.warn("无法恢复本地图片", error);
+  }
+}
+
 function saveState() {
   try {
     const data = readForm();
@@ -769,7 +879,8 @@ function saveState() {
       current,
       ...state.projects.filter((project) => project.id !== current.id),
     ].slice(0, MAX_PROJECTS);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    void persistMediaInData(data).catch((error) => console.warn("无法保存图片到本地媒体库", error));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(compactDataForLocalStorage(data)));
     saveProjectStore();
     updateProjectHistory();
   } catch {
@@ -784,6 +895,15 @@ function loadState() {
   return findHistoryProject(state.currentProjectId)?.data || findHistoryProject(GUIDE_CARDS_PROJECT_ID)?.data || defaultFormState();
 }
 
+async function hydrateActiveProjectMedia() {
+  const project = findHistoryProject(state.currentProjectId);
+  if (!project || isBuiltInProject(project)) return;
+  await hydrateProjectMedia(project.data);
+  if (project.id !== state.currentProjectId) return;
+  applyForm(project.data);
+  requestRender();
+}
+
 function migrateStoredState(data) {
   const oldBoldQuote =
     "**“请你从某个领域里，选择一个研究生水平的概念。然后写一个寓言故事，用间接的方式把这个概念讲清楚。不要一开始就说答案，尽量到故事快结束的时候，才让人意识到原来讲的是这个概念。故事结束后，再解释这个概念，以及故事里的隐喻分别对应什么。”**";
@@ -795,6 +915,7 @@ function migrateStoredState(data) {
   if (String(data.imageHeight) === "380") data.imageHeight = "520";
   if (!Number.isFinite(Number(data.lineHeight))) data.lineHeight = "1.65";
   if (Math.abs(Number(data.lineHeight) - 1.85) < 0.001) data.lineHeight = "1.65";
+  if (!Number.isFinite(Number(data.blankLineHeight))) data.blankLineHeight = "26";
   data.headerMode = data.headerMode === "first" ? "first" : "every";
   data.appMode = data.appMode === "article" ? "article" : "cards";
   data.articleTheme = normalizeArticleTheme(data.articleTheme);
@@ -878,7 +999,10 @@ function saveProjectStore() {
     PROJECTS_STORAGE_KEY,
     JSON.stringify({
       activeId: state.currentProjectId,
-      projects: state.projects.filter((project) => !isBuiltInProject(project)).slice(0, MAX_PROJECTS),
+      projects: state.projects
+        .filter((project) => !isBuiltInProject(project))
+        .slice(0, MAX_PROJECTS)
+        .map((project) => ({ ...project, data: compactDataForLocalStorage(project.data) })),
     }),
   );
 }
@@ -978,6 +1102,7 @@ async function openProject(projectId) {
   if (!project) return;
   state.currentProjectId = project.id;
   state.scrollOffset = 0;
+  await hydrateProjectMedia(project.data);
   applyForm(project.data);
   syncGuideReadOnlyMode();
   if (isBuiltInProject(project)) saveProjectStore();
@@ -1380,8 +1505,15 @@ async function addImageFiles(files, sourcePaths = null) {
   for (const [index, file] of imageFiles.entries()) {
     const src = await readFileAsDataURL(file);
     const id = createImportedImageId(index);
+    const storageKey = mediaKeyForImage(id);
+    try {
+      await writeMedia(storageKey, src);
+    } catch (error) {
+      console.warn("图片暂时无法写入本地媒体库", error);
+    }
     state.images[id] = {
       src,
+      storageKey,
       name: file.name || "图片",
       sourcePath: sourcePaths?.get(file) || sourcePathForFile(file),
       crop: null,
@@ -1646,6 +1778,19 @@ function closeObsidianImportMenu() {
   els.obsidianImportStatus.textContent = "图片会按文件名自动匹配；有缺失时不会导入成品。";
 }
 
+function previewObsidianDraft() {
+  const markdown = els.obsidianMarkdown.value;
+  if (!markdown.trim()) return;
+  // Keep the original Obsidian source in the editor. The renderer resolves image
+  // references from the image library, so future edits remain a true live preview.
+  els.content.value = markdown;
+  scheduleTextHistoryCommit();
+  requestRender();
+  if (countMarkdownImageReferences(markdown)) {
+    els.obsidianImportStatus.textContent = "正在实时预览；图片会在导入时自动从已连接的仓库读取。";
+  }
+}
+
 async function importMarkdownFromConnectedVault(markdown) {
   if (!obsidianVault.handle || obsidianVault.importing) return false;
   obsidianVault.importing = true;
@@ -1684,7 +1829,7 @@ async function importMarkdownFromConnectedVault(markdown) {
       els.status.textContent = "发现重名图片，暂时无法自动判断该用哪一张。";
       return true;
     }
-    replaceEditorContent(converted.content);
+    replaceEditorContent(markdown);
     els.status.textContent = `已从仓库自动读取 ${imported.ids.length} 张图片并完成导入`;
     closeObsidianImportMenu();
     return true;
@@ -1751,13 +1896,7 @@ async function importObsidianDocument() {
       els.status.textContent = summary;
       return;
     }
-    commitTextHistory();
-    els.content.value = converted.content;
-    els.content.focus();
-    els.content.setSelectionRange(0, 0);
-    commitTextHistory();
-    updateImageList();
-    requestRender();
+    replaceEditorContent(markdown);
 
     const skippedText = imported.skipped ? `；忽略 ${imported.skipped} 个非图片文件` : "";
     const summary = `已导入正文，加入 ${imported.ids.length} 张图片，匹配 ${converted.matched} 处${skippedText}`;
@@ -1813,6 +1952,12 @@ async function handleAvatar(event) {
   const file = event.target.files?.[0];
   if (!file) return;
   state.avatar = await readFileAsDataURL(file);
+  state.avatarStorageKey = `avatar:${Date.now().toString(36)}`;
+  try {
+    await writeMedia(state.avatarStorageKey, state.avatar);
+  } catch (error) {
+    console.warn("头像暂时无法写入本地媒体库", error);
+  }
   state.avatarCrop = null;
   updateAvatarPreview();
   updateImageList();
@@ -2315,9 +2460,32 @@ function resizeCropRect(handle, startRect, point, image, aspect) {
   return fitRectToAspect({ x, y, width, height }, image, aspect);
 }
 
-function parseBlocks(content) {
+function resolveMarkdownImageBlock(line, imageLookup) {
+  const internal = line.match(/^\[\[image:([\w-]+)\]\]$/);
+  if (internal) return internal[1];
+
+  const obsidian = line.match(/^!\[\[([^\]\n]+)\]\]$/);
+  if (obsidian) {
+    return resolveObsidianImageReference(obsidian[1].split("|")[0].trim(), imageLookup).id || null;
+  }
+
+  const markdown = line.match(/^!\[[^\]\n]*\]\((?:<([^>]+)>|([^\s)]+))(?:\s+[^)]*)?\)$/);
+  if (markdown) {
+    return resolveObsidianImageReference(markdown[1] || markdown[2], imageLookup).id || null;
+  }
+  return null;
+}
+
+function isMarkdownImageBlock(line) {
+  return /^\[\[image:[\w-]+\]\]$/.test(line)
+    || /^!\[\[[^\]\n]+\]\]$/.test(line)
+    || /^!\[[^\]\n]*\]\((?:<[^>]+>|[^\s)]+)(?:\s+[^)]*)?\)$/.test(line);
+}
+
+function parseBlocks(content, images = {}) {
   const normalized = content.replace(/\r\n/g, "\n");
   const lines = normalized.split("\n");
+  const imageLookup = buildImageReferenceLookup(images);
   const lineOffsets = [];
   let runningOffset = 0;
   lines.forEach((line) => {
@@ -2341,10 +2509,10 @@ function parseBlocks(content) {
     const trimmedStart = lineOffsets[index] + leading;
 
     if (trimmed) {
-      const imageInline = trimmed.match(/^\[\[image:([\w-]+)\]\]$/);
-      if (imageInline) {
+      const imageId = resolveMarkdownImageBlock(trimmed, imageLookup);
+      if (isMarkdownImageBlock(trimmed)) {
         flushParagraph();
-        blocks.push({ type: "image", id: imageInline[1] });
+        if (imageId) blocks.push({ type: "image", id: imageId });
       } else if (isMarkdownTableHeader(trimmed, lines[index + 1])) {
         flushParagraph();
         const headerCells = splitMarkdownTableRow(trimmed);
@@ -2367,8 +2535,20 @@ function parseBlocks(content) {
           blocks.push({ type: level === 1 ? "h1" : level === 2 ? "h2" : "h3", tokens: parseInline(heading[2].trim(), contentStart) });
         } else if (trimmed.startsWith("> ")) {
           flushParagraph();
-          const contentStart = trimmedStart + 2 + countLeadingSpaces(trimmed.slice(2));
-          blocks.push({ type: "quote", tokens: parseInline(trimmed.slice(2).trim(), contentStart) });
+          const quoteLines = [];
+          let quoteIndex = index;
+          while (quoteIndex < lines.length) {
+            const quoteSource = lines[quoteIndex];
+            const quoteLeading = quoteSource.match(/^\s*/)[0].length;
+            const quoteTrimmed = quoteSource.slice(quoteLeading).trimEnd();
+            if (!quoteTrimmed.startsWith("> ")) break;
+            const quoteText = quoteTrimmed.slice(2).trim();
+            const quoteStart = lineOffsets[quoteIndex] + quoteLeading + 2 + countLeadingSpaces(quoteTrimmed.slice(2));
+            quoteLines.push(parseInline(quoteText, quoteStart));
+            quoteIndex += 1;
+          }
+          blocks.push({ type: "quote", lines: quoteLines });
+          index = quoteIndex - 1;
         } else if (/^([-*+]\s+|\d+[.)]\s+)/.test(trimmed)) {
           const text = trimmed.replace(/^([-*+]\s+|\d+[.)]\s+)/, "• ");
           paragraphLines.push(parseInline(text, trimmedStart));
@@ -2381,9 +2561,9 @@ function parseBlocks(content) {
       }
     } else {
       flushParagraph();
-      if (line.length > 0) {
-        blocks.push({ type: "spacer" });
-      }
+      // Every empty Markdown line is intentional visual space. Consecutive
+      // returns therefore create consecutive gaps in the preview.
+      blocks.push({ type: "spacer" });
     }
   }
 
@@ -2697,7 +2877,7 @@ function buildTableLayout(ctx, block, settings, maxWidth) {
 }
 
 function blankLineGap(settings) {
-  return Math.max(18, Math.ceil(settings.fontSize * 0.8));
+  return clamp(Number(settings.blankLineHeight) || Math.ceil(settings.fontSize * 0.8), 8, 160);
 }
 
 function measureToken(ctx, token, style) {
@@ -2774,7 +2954,7 @@ function contentBoundsForHeader(showHeader) {
 async function buildPages(settings) {
   const measureCanvas = document.createElement("canvas");
   const ctx = measureCanvas.getContext("2d");
-  const blocks = parseBlocks(settings.content);
+  const blocks = parseBlocks(settings.content, settings.images);
   const avatar = await loadImage(settings.avatar).catch(() => null);
   const badge = await loadImage(verifiedBadgeSrc).catch(() => null);
   const imageCache = {};
@@ -2902,7 +3082,7 @@ async function buildPages(settings) {
 async function buildScrollPage(settings) {
   const measureCanvas = document.createElement("canvas");
   const ctx = measureCanvas.getContext("2d");
-  const blocks = parseBlocks(settings.content);
+  const blocks = parseBlocks(settings.content, settings.images);
   const avatar = await loadImage(settings.avatar).catch(() => null);
   const badge = await loadImage(verifiedBadgeSrc).catch(() => null);
   const imageCache = {};
@@ -3191,6 +3371,14 @@ function isDarkHexColor(hex) {
   return (red * 299 + green * 587 + blue * 114) / 1000 < 128;
 }
 
+function colorWithAlpha(hex, alpha) {
+  const value = String(hex || "").trim().replace("#", "");
+  const expanded = value.length === 3 ? value.split("").map((part) => part + part).join("") : value;
+  if (!/^[0-9a-f]{6}$/i.test(expanded)) return `rgba(43,127,216,${alpha})`;
+  const number = Number.parseInt(expanded, 16);
+  return `rgba(${(number >> 16) & 255},${(number >> 8) & 255},${number & 255},${alpha})`;
+}
+
 function drawVerifiedBadge(ctx, badge, x, y) {
   ctx.save();
   if (badge) {
@@ -3257,9 +3445,10 @@ function drawTableBlock(ctx, item, settings) {
 function drawTextLine(ctx, item, settings) {
   const { style, line, x, y, lineHeight } = item;
   if (style.quote) {
-    ctx.fillStyle = settings.accentColor;
-    roundedRect(ctx, x - 28, y + 7, 7, lineHeight - 13, 4);
-    ctx.fill();
+    // Adjacent wrapped lines overlap by one pixel so a quote reads as one
+    // continuous, low-contrast guide line rather than broken black bars.
+    ctx.fillStyle = colorWithAlpha(settings.accentColor, isDarkHexColor(settings.bgColor) ? 0.56 : 0.26);
+    ctx.fillRect(x - 25, y - 1, 4, lineHeight + 2);
   }
 
   let cursor = x;
@@ -3340,6 +3529,12 @@ function renderArticlePreview(settings) {
   const article = document.createElement("article");
   article.className = `article-preview article-theme-${settings.articleTheme} article-font-${settings.articleFont} article-size-${settings.articleSize}`;
   article.style.setProperty("--article-accent", settings.articleColor);
+  article.style.setProperty("--article-accent-soft", colorWithAlpha(settings.articleColor, 0.14));
+  article.style.setProperty("--article-accent-highlight", colorWithAlpha(settings.articleColor, 0.18));
+  article.style.setProperty("--article-accent-guide", colorWithAlpha(settings.articleColor, 0.28));
+  article.style.setProperty("--article-accent-border", colorWithAlpha(settings.articleColor, 0.26));
+  article.style.setProperty("--article-accent-table", colorWithAlpha(settings.articleColor, 0.11));
+  article.style.setProperty("--article-blank-gap", `${blankLineGap(settings)}px`);
   article.innerHTML = markdownToArticleHtml(settings.content, settings.images);
   els.pages.append(article);
 
@@ -3351,6 +3546,7 @@ function renderArticlePreview(settings) {
 
 function markdownToArticleHtml(markdown, images = {}) {
   const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+  const imageLookup = buildImageReferenceLookup(images);
   const html = [];
   let paragraph = [];
   let list = [];
@@ -3398,6 +3594,7 @@ function markdownToArticleHtml(markdown, images = {}) {
     if (!trimmed) {
       flushParagraph();
       flushList();
+      if (html.length) html.push('<div class="article-blank-line" aria-hidden="true"></div>');
       continue;
     }
 
@@ -3418,11 +3615,11 @@ function markdownToArticleHtml(markdown, images = {}) {
       continue;
     }
 
-    const imageMatch = trimmed.match(/^\[\[image:([\w-]+)\]\]$/);
-    if (imageMatch) {
+    const imageId = resolveMarkdownImageBlock(trimmed, imageLookup);
+    if (isMarkdownImageBlock(trimmed)) {
       flushParagraph();
       flushList();
-      const image = images[imageMatch[1]];
+      const image = images[imageId];
       if (image?.src) html.push(`<figure><img src="${escapeAttribute(image.src)}" alt="${escapeAttribute(image.name || "图片")}" /></figure>`);
       continue;
     }
@@ -3439,7 +3636,14 @@ function markdownToArticleHtml(markdown, images = {}) {
     if (trimmed.startsWith("> ")) {
       flushParagraph();
       flushList();
-      html.push(`<blockquote>${renderArticleInline(trimmed.slice(2))}</blockquote>`);
+      const quoteLines = [];
+      let quoteIndex = index;
+      while (quoteIndex < lines.length && lines[quoteIndex].trim().startsWith("> ")) {
+        quoteLines.push(lines[quoteIndex].trim().slice(2).trim());
+        quoteIndex += 1;
+      }
+      html.push(`<blockquote>${quoteLines.map((quote) => renderArticleInline(quote)).join("<br>")}</blockquote>`);
+      index = quoteIndex - 1;
       continue;
     }
 
@@ -3544,7 +3748,13 @@ function drawPreview(canvases) {
     button.innerHTML = '<i data-lucide="download"></i>';
     const filename = state.mode === "scroll" ? "esther-buer-scroll-shot.png" : `esther-buer-page-${String(index + 1).padStart(2, "0")}.png`;
     button.addEventListener("click", () => downloadCanvas(canvas, filename));
-    actions.append(label, button);
+    const previewButton = document.createElement("button");
+    previewButton.type = "button";
+    previewButton.title = "放大预览";
+    previewButton.setAttribute("aria-label", `放大预览第 ${index + 1} 张`);
+    previewButton.innerHTML = '<i data-lucide="maximize-2"></i>';
+    previewButton.addEventListener("click", () => openImagePreview(index));
+    actions.append(label, previewButton, button);
     shell.append(frame, actions);
     els.pages.append(shell);
   });
@@ -3555,6 +3765,44 @@ function drawPreview(canvases) {
       ? `滑动截图模式：在卡片上滚动，下载当前画面`
       : `已生成 ${canvases.length} 张，尺寸 ${CANVAS_WIDTH}x${CANVAS_HEIGHT}`;
   if (window.lucide) window.lucide.createIcons();
+}
+
+function previewFilename(index) {
+  return state.mode === "scroll" ? "esther-buer-scroll-shot.png" : `esther-buer-page-${String(index + 1).padStart(2, "0")}.png`;
+}
+
+function openImagePreview(index = 0) {
+  if (!state.canvases.length) {
+    els.status.textContent = "还没有可预览的图片";
+    return;
+  }
+  state.previewIndex = clamp(index, 0, state.canvases.length - 1);
+  updateImagePreview();
+  els.imagePreviewModal.classList.remove("hidden");
+  if (window.lucide) window.lucide.createIcons();
+}
+
+function updateImagePreview() {
+  const canvas = state.canvases[state.previewIndex];
+  if (!canvas) return;
+  els.imagePreviewImage.src = canvas.toDataURL(EXPORT_IMAGE_MIME);
+  els.imagePreviewMeta.textContent = state.mode === "scroll"
+    ? "滑动截图"
+    : `图片 ${String(state.previewIndex + 1).padStart(2, "0")} / ${String(state.canvases.length).padStart(2, "0")}`;
+  els.imagePreviewPrevious.disabled = state.previewIndex === 0;
+  els.imagePreviewNext.disabled = state.previewIndex === state.canvases.length - 1;
+}
+
+function closeImagePreview() {
+  els.imagePreviewModal.classList.add("hidden");
+  els.imagePreviewImage.removeAttribute("src");
+}
+
+function stepImagePreview(delta) {
+  const next = clamp(state.previewIndex + delta, 0, state.canvases.length - 1);
+  if (next === state.previewIndex) return;
+  state.previewIndex = next;
+  updateImagePreview();
 }
 
 function createImageEditLayer(canvas) {
@@ -3784,18 +4032,20 @@ function setScrollOffset(value) {
 }
 
 async function downloadCanvas(canvas, filename) {
-  const writable = await chooseSaveTarget(filename, EXPORT_IMAGE_MIME, EXPORT_IMAGE_EXTENSION);
-  if (writable === false) {
-    els.status.textContent = "已取消下载";
-    return;
+  try {
+    const blob = await canvasToLosslessPngBlob(canvas);
+    if (!blob) {
+      els.status.textContent = "图片生成失败，请调整内容后再试";
+      return;
+    }
+    // Browser-native downloading works consistently in desktop browsers and
+    // avoids the intermittent permission failures of the save-file picker.
+    await saveBlob(blob, filename);
+    els.status.textContent = `已开始下载 ${filename}`;
+  } catch (error) {
+    console.error(error);
+    els.status.textContent = "下载失败，请刷新后再试";
   }
-  const blob = await canvasToLosslessPngBlob(canvas);
-  if (!blob) {
-    els.status.textContent = "图片生成失败，请调整内容后再试";
-    return;
-  }
-  await saveBlob(blob, filename, writable);
-  els.status.textContent = writable ? `已保存 ${filename}` : `已交给浏览器下载 ${filename}`;
 }
 
 async function chooseSaveTarget(filename, mimeType, extension) {
@@ -3832,7 +4082,7 @@ async function saveBlob(blob, filename, writable = null) {
   document.body.append(link);
   link.click();
   link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
 async function downloadArticleImage() {
@@ -3854,31 +4104,51 @@ async function downloadArticleImage() {
     return;
   }
 
-  const filename = "esther-buer-article.png";
-  const writable = await chooseSaveTarget(filename, EXPORT_IMAGE_MIME, EXPORT_IMAGE_EXTENSION);
-  if (writable === false) {
-    els.status.textContent = "已取消下载";
-    return;
+  try {
+    els.status.textContent = "正在生成长图...";
+    await waitForPreviewImages(article);
+    const width = article.scrollWidth;
+    const height = article.scrollHeight;
+    const maxCanvasEdge = 16384;
+    const maxCanvasPixels = 268_000_000;
+    const displayScale = Math.min(2, window.devicePixelRatio || 1);
+    const safeScale = Math.min(
+      displayScale,
+      maxCanvasEdge / Math.max(width, height),
+      Math.sqrt(maxCanvasPixels / Math.max(1, width * height)),
+    );
+    const canvas = await window.html2canvas(article, {
+      backgroundColor: "#ffffff",
+      scale: Math.max(0.05, safeScale),
+      useCORS: true,
+      imageTimeout: 15000,
+      width,
+      height,
+      windowWidth: Math.max(document.documentElement.clientWidth, width),
+      windowHeight: Math.max(document.documentElement.clientHeight, height),
+    });
+    const blob = await canvasToLosslessPngBlob(canvas);
+    if (!blob) {
+      els.status.textContent = "长图生成失败，请调整内容后再试";
+      return;
+    }
+    await saveBlob(blob, "esther-buer-article.png");
+    els.status.textContent = "已开始下载长图";
+  } catch (error) {
+    console.error(error);
+    els.status.textContent = "长图生成失败：图片或样式无法读取，请刷新后重试";
   }
+}
 
-  els.status.textContent = "正在生成长图...";
-  const canvas = await window.html2canvas(article, {
-    backgroundColor: null,
-    scale: Math.min(2, window.devicePixelRatio || 1),
-    useCORS: true,
-    imageTimeout: 15000,
-    width: article.scrollWidth,
-    height: article.scrollHeight,
-    windowWidth: Math.max(document.documentElement.clientWidth, article.scrollWidth),
-    windowHeight: Math.max(document.documentElement.clientHeight, article.scrollHeight),
-  });
-  const blob = await canvasToLosslessPngBlob(canvas);
-  if (!blob) {
-    els.status.textContent = "长图生成失败，请调整内容后再试";
-    return;
-  }
-  await saveBlob(blob, filename, writable);
-  els.status.textContent = writable ? `已保存 ${filename}` : `已交给浏览器下载 ${filename}`;
+async function waitForPreviewImages(container) {
+  const images = Array.from(container.querySelectorAll("img"));
+  await Promise.all(images.map((image) => {
+    if (image.complete) return Promise.resolve();
+    return new Promise((resolve) => {
+      image.addEventListener("load", resolve, { once: true });
+      image.addEventListener("error", resolve, { once: true });
+    });
+  }));
 }
 
 function canvasToLosslessPngBlob(canvas) {
@@ -4040,6 +4310,7 @@ function bindEvents() {
     els.bgColor,
     els.fontSize,
     els.lineHeight,
+    els.blankLineHeight,
     els.zhFont,
     els.enFont,
     els.imageHeight,
@@ -4067,6 +4338,7 @@ function bindEvents() {
   });
   els.contentImage.addEventListener("change", handleContentImage);
   els.connectObsidianVault.addEventListener("click", connectObsidianVault);
+  els.obsidianMarkdown.addEventListener("input", debounce(previewObsidianDraft, 180));
   els.obsidianImage.addEventListener("change", (event) => {
     addPendingObsidianFiles(event.target.files);
     event.target.value = "";
@@ -4110,6 +4382,7 @@ function bindEvents() {
   window.addEventListener("mouseup", stopCropDrag);
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !els.cropModal.classList.contains("hidden")) closeCropper();
+    if (event.key === "Escape" && !els.imagePreviewModal.classList.contains("hidden")) closeImagePreview();
   });
   els.findNext.addEventListener("click", findNext);
   els.replaceOne.addEventListener("click", replaceCurrent);
@@ -4125,6 +4398,17 @@ function bindEvents() {
   els.themeToggle.addEventListener("click", toggleUiTheme);
   els.downloadZip.addEventListener("click", downloadAll);
   els.downloadArticle.addEventListener("click", downloadArticleImage);
+  els.openImagePreview.addEventListener("click", () => openImagePreview(0));
+  els.imagePreviewClose.addEventListener("click", closeImagePreview);
+  els.imagePreviewPrevious.addEventListener("click", () => stepImagePreview(-1));
+  els.imagePreviewNext.addEventListener("click", () => stepImagePreview(1));
+  els.imagePreviewDownload.addEventListener("click", () => {
+    const canvas = state.canvases[state.previewIndex];
+    if (canvas) downloadCanvas(canvas, previewFilename(state.previewIndex));
+  });
+  els.imagePreviewModal.addEventListener("click", (event) => {
+    if (event.target === els.imagePreviewModal) closeImagePreview();
+  });
 }
 
 loadPanelLayout();
@@ -4136,6 +4420,7 @@ resetTextHistory();
 updateProjectHistory();
 bindEvents();
 render();
+void hydrateActiveProjectMedia();
 void loadObsidianVaultConnection();
 
 if (window.lucide) {
