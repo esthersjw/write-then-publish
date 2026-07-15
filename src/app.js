@@ -51,12 +51,6 @@ const els = {
   obsidianImportMenu: $("#obsidianImportMenu"),
   connectObsidianVault: $("#connectObsidianVaultBtn"),
   obsidianVaultStatus: $("#obsidianVaultStatus"),
-  obsidianMarkdown: $("#obsidianMarkdownInput"),
-  obsidianImage: $("#obsidianImageInput"),
-  obsidianDropZone: $("#obsidianDropZone"),
-  obsidianFileSummary: $("#obsidianFileSummary"),
-  obsidianImportStatus: $("#obsidianImportStatus"),
-  obsidianImport: $("#obsidianImportBtn"),
   inlineColor: $("#inlineColorInput"),
   inlineBgColor: $("#inlineBgColorInput"),
   colorMenu: $("#colorMenu"),
@@ -249,7 +243,6 @@ const cropper = {
 };
 
 let imageEditDrag = null;
-let pendingObsidianFiles = [];
 const obsidianVault = {
   handle: null,
   loading: false,
@@ -1475,26 +1468,6 @@ function countMarkdownImageReferences(markdown) {
   return (text.match(/!\[\[[^\]\n]+\]\]/g) || []).length + (text.match(/!\[[^\]\n]*\]\([^)]*\)/g) || []).length;
 }
 
-function updateObsidianFileSummary() {
-  if (!els.obsidianFileSummary) return;
-  els.obsidianFileSummary.textContent = pendingObsidianFiles.length
-    ? `已选择 ${pendingObsidianFiles.length} 张图片，导入时会自动匹配`
-    : "可一次放入多张图片，也可拖入附件文件夹";
-}
-
-function addPendingObsidianFiles(files) {
-  const selected = Array.from(files || []).filter(isImageFile);
-  const existing = new Set(pendingObsidianFiles.map((file) => `${sourcePathForFile(file)}:${file.size}:${file.lastModified}`));
-  selected.forEach((file) => {
-    const key = `${sourcePathForFile(file)}:${file.size}:${file.lastModified}`;
-    if (!existing.has(key)) {
-      pendingObsidianFiles.push(file);
-      existing.add(key);
-    }
-  });
-  updateObsidianFileSummary();
-}
-
 function openObsidianVaultDatabase() {
   return new Promise((resolve, reject) => {
     if (!window.indexedDB) {
@@ -1565,7 +1538,7 @@ async function connectObsidianVault() {
     obsidianVault.handle = handle;
     await saveObsidianVault(handle);
     setObsidianVaultStatus(`已连接：${handle.name}`, true);
-    els.obsidianImportStatus.textContent = "仓库已连接。以后直接把 Obsidian Markdown 粘贴到正文编辑区即可。";
+    els.status.textContent = "仓库已连接。以后直接把 Obsidian Markdown 粘贴到正文编辑区即可。";
   } catch (error) {
     if (error?.name !== "AbortError") setObsidianVaultStatus("连接失败，请重新选择 Obsidian 仓库根目录。");
   }
@@ -1645,21 +1618,6 @@ function replaceEditorContent(content) {
 
 function closeObsidianImportMenu() {
   els.obsidianImportMenu.open = false;
-  els.obsidianMarkdown.value = "";
-  els.obsidianImportStatus.textContent = "图片会按文件名自动匹配；有缺失时不会导入成品。";
-}
-
-function previewObsidianDraft() {
-  const markdown = els.obsidianMarkdown.value;
-  if (!markdown.trim()) return;
-  // Keep the original Obsidian source in the editor. The renderer resolves image
-  // references from the image library, so later edits remain a true live preview.
-  els.content.value = markdown;
-  scheduleTextHistoryCommit();
-  requestRender();
-  if (countMarkdownImageReferences(markdown)) {
-    els.obsidianImportStatus.textContent = "正在实时预览；图片会在导入时自动从已连接的仓库读取。";
-  }
 }
 
 async function importMarkdownFromConnectedVault(markdown) {
@@ -1688,9 +1646,7 @@ async function importMarkdownFromConnectedVault(markdown) {
     }
     if (missing.length) {
       const message = `仓库已连接，但没有找到 ${missing.length} 张图片：${missing.slice(0, 3).join("、")}。请确认选择的是包含这些路径的 Obsidian 仓库根目录。`;
-      els.obsidianMarkdown.value = markdown;
       els.obsidianImportMenu.open = true;
-      els.obsidianImportStatus.textContent = message;
       els.status.textContent = message;
       return true;
     }
@@ -1741,47 +1697,6 @@ async function getDroppedFiles(dataTransfer) {
   return Array.from(dataTransfer?.files || []);
 }
 
-async function importObsidianDocument() {
-  const markdown = els.obsidianMarkdown.value.trim();
-  if (!markdown) {
-    els.obsidianImportStatus.textContent = "先把 Obsidian 正文粘贴到上方。";
-    return;
-  }
-
-  if (obsidianVault.handle && !pendingObsidianFiles.length) {
-    await importMarkdownFromConnectedVault(markdown);
-    return;
-  }
-
-  els.obsidianImport.disabled = true;
-  els.obsidianImportStatus.textContent = "正在读取图片并匹配正文…";
-  try {
-    const imported = await addImageFiles(pendingObsidianFiles);
-    pendingObsidianFiles = [];
-    els.obsidianImage.value = "";
-    updateObsidianFileSummary();
-    const converted = convertObsidianImageReferences(markdown, state.images);
-    if (converted.unresolved.length) {
-      const summary = `已读入 ${imported.ids.length} 张图片，但还有 ${converted.unresolved.length} 处未匹配（${converted.unresolved.slice(0, 3).join("、")}）。请继续拖入缺少的图片后再点导入。`;
-      els.obsidianImportStatus.textContent = summary;
-      els.status.textContent = summary;
-      return;
-    }
-    replaceEditorContent(markdown);
-
-    const skippedText = imported.skipped ? `；忽略 ${imported.skipped} 个非图片文件` : "";
-    const summary = `已导入正文，加入 ${imported.ids.length} 张图片，匹配 ${converted.matched} 处${skippedText}`;
-    els.obsidianImportStatus.textContent = summary;
-    els.status.textContent = summary;
-    closeObsidianImportMenu();
-  } catch (error) {
-    console.error(error);
-    els.obsidianImportStatus.textContent = "导入失败，请检查图片格式后重试。";
-  } finally {
-    els.obsidianImport.disabled = false;
-  }
-}
-
 async function handleEditorPaste(event) {
   const files = Array.from(event.clipboardData?.items || [])
     .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
@@ -1796,9 +1711,8 @@ async function handleEditorPaste(event) {
       await importMarkdownFromConnectedVault(markdown);
       return;
     }
-    els.obsidianMarkdown.value = markdown;
     els.obsidianImportMenu.open = true;
-    els.obsidianImportStatus.textContent = `检测到 ${references} 个 Obsidian 图片引用。请拖入这篇文章的图片附件，再点“导入并替换正文”。`;
+    els.status.textContent = `检测到 ${references} 个 Obsidian 图片引用。请先连接 Obsidian 仓库后再粘贴。`;
     requestAnimationFrame(() => positionToolPopover(els.obsidianImportMenu));
     return;
   }
@@ -4097,27 +4011,6 @@ function bindEvents() {
   });
   els.contentImage.addEventListener("change", handleContentImage);
   els.connectObsidianVault?.addEventListener("click", connectObsidianVault);
-  els.obsidianMarkdown.addEventListener("input", debounce(previewObsidianDraft, 180));
-  els.obsidianImage.addEventListener("change", (event) => {
-    addPendingObsidianFiles(event.target.files);
-    event.target.value = "";
-  });
-  els.obsidianImport.addEventListener("click", importObsidianDocument);
-  ["dragenter", "dragover"].forEach((eventName) => {
-    els.obsidianDropZone.addEventListener(eventName, (event) => {
-      if (!Array.from(event.dataTransfer?.types || []).includes("Files")) return;
-      event.preventDefault();
-      els.obsidianDropZone.classList.add("drag-over");
-    });
-  });
-  ["dragleave", "dragend"].forEach((eventName) => {
-    els.obsidianDropZone.addEventListener(eventName, () => els.obsidianDropZone.classList.remove("drag-over"));
-  });
-  els.obsidianDropZone.addEventListener("drop", async (event) => {
-    event.preventDefault();
-    els.obsidianDropZone.classList.remove("drag-over");
-    addPendingObsidianFiles(await getDroppedFiles(event.dataTransfer));
-  });
   els.applyImageWidth?.addEventListener("click", applyImageWidthToAll);
   els.applyFixedImageSize?.addEventListener("click", applyFixedImageSizeToAll);
   els.avatarInput.addEventListener("change", handleAvatar);
