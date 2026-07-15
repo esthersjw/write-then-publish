@@ -1529,7 +1529,12 @@ async function saveObsidianVault(handle) {
 }
 
 function setObsidianVaultStatus(message, connected = false) {
-  els.obsidianVaultStatus.textContent = message;
+  const statusText = String(message || "");
+  if (statusText.startsWith("已连接：")) {
+    els.obsidianVaultStatus.innerHTML = `已连接：<b>${escapeHtml(statusText.replace(/^已连接：/, ""))}</b>`;
+  } else {
+    els.obsidianVaultStatus.textContent = statusText;
+  }
   els.obsidianVaultStatus.parentElement?.classList.toggle("is-connected", connected);
   els.obsidianImportMenu?.classList.toggle("is-vault-connected", Boolean(obsidianVault.handle));
   els.connectObsidianVault.innerHTML = connected

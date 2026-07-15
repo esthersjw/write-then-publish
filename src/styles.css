@@ -843,8 +843,8 @@ body[data-app-mode="article"] .profile-inline {
 
 .obsidian-import-popover {
   display: grid;
-  gap: 12px;
-  width: min(420px, calc(100vw - 36px));
+  gap: 14px;
+  width: min(520px, calc(100vw - 36px));
 }
 
 .obsidian-import-heading {
@@ -854,27 +854,28 @@ body[data-app-mode="article"] .profile-inline {
 
 .obsidian-import-heading strong {
   color: var(--ink);
-  font-size: 14px;
+  font-size: 20px;
+  line-height: 1.15;
 }
 
 .obsidian-import-heading span,
 .obsidian-import-status {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
 .obsidian-direct-paste-hint {
   display: none;
   margin: 0;
-  padding: 10px 11px;
-  border-left: 3px solid var(--accent);
-  border-radius: 8px;
+  padding: 14px 16px;
+  border-left: 4px solid var(--accent);
+  border-radius: 0;
   color: var(--control-text);
-  background: color-mix(in srgb, var(--accent) 8%, var(--soft));
-  font-size: 12px;
-  font-weight: 650;
+  background: color-mix(in srgb, var(--accent) 12%, var(--soft));
+  font-size: 15px;
+  font-weight: 760;
   line-height: 1.55;
 }
 
@@ -895,30 +896,40 @@ body[data-app-mode="article"] .profile-inline {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 9px;
-  padding: 9px;
+  gap: 14px;
+  min-height: 74px;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--soft);
 }
 
 .obsidian-vault-row .secondary-button {
-  min-height: 34px;
-  padding: 0 10px;
+  min-height: 50px;
+  padding: 0 16px;
+  font-size: 15px;
+  font-weight: 820;
   white-space: nowrap;
 }
 
 .obsidian-vault-row span {
   overflow: hidden;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 15px;
   font-weight: 700;
   line-height: 1.4;
   text-overflow: ellipsis;
 }
 
+.obsidian-vault-row span b {
+  color: var(--ink);
+  font-weight: 850;
+}
+
 .obsidian-vault-row.is-connected {
   border-color: color-mix(in srgb, var(--accent) 46%, var(--line));
+  background: color-mix(in srgb, var(--accent) 4%, var(--soft));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .obsidian-document-picker {
