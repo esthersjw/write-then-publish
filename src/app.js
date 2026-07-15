@@ -5,6 +5,9 @@ const CARD_CONTENT_WIDTH = CANVAS_WIDTH - CARD_SIDE_PADDING * 2;
 const EXPORT_IMAGE_MIME = "image/png";
 const EXPORT_IMAGE_EXTENSION = ".png";
 const EXPORT_ZIP_COMPRESSION = "STORE";
+const OBSIDIAN_VAULT_DB = "writeThenPublishObsidianVault";
+const OBSIDIAN_VAULT_STORE = "settings";
+const OBSIDIAN_VAULT_KEY = "directoryHandle";
 const STORAGE_KEY = "graphicTextLayoutState.v1";
 const PROJECTS_STORAGE_KEY = "graphicTextLayoutProjects.v1";
 const PANEL_LAYOUT_STORAGE_KEY = "writeThenPublishPanelLayout.v1";
@@ -45,6 +48,15 @@ const els = {
   articleSizeButtons: document.querySelectorAll("[data-article-size]"),
   articleColorButtons: document.querySelectorAll("[data-article-color]"),
   contentImage: $("#contentImageInput"),
+  obsidianImportMenu: $("#obsidianImportMenu"),
+  connectObsidianVault: $("#connectObsidianVaultBtn"),
+  obsidianVaultStatus: $("#obsidianVaultStatus"),
+  obsidianMarkdown: $("#obsidianMarkdownInput"),
+  obsidianImage: $("#obsidianImageInput"),
+  obsidianDropZone: $("#obsidianDropZone"),
+  obsidianFileSummary: $("#obsidianFileSummary"),
+  obsidianImportStatus: $("#obsidianImportStatus"),
+  obsidianImport: $("#obsidianImportBtn"),
   inlineColor: $("#inlineColorInput"),
   inlineBgColor: $("#inlineBgColorInput"),
   colorMenu: $("#colorMenu"),
@@ -237,6 +249,12 @@ const cropper = {
 };
 
 let imageEditDrag = null;
+let pendingObsidianFiles = [];
+const obsidianVault = {
+  handle: null,
+  loading: false,
+  importing: false,
+};
 
 function defaultFormState() {
   return {
@@ -1338,27 +1356,461 @@ function loadImage(src) {
   });
 }
 
-async function handleContentImage(event) {
-  const files = Array.from(event.target.files || []);
-  if (!files.length) return;
-  const tags = [];
-  const now = Date.now().toString(36);
+function isImageFile(file) {
+  return file?.type?.startsWith("image/") || /\.(avif|bmp|gif|heic|jpe?g|png|svg|webp)$/i.test(file?.name || "");
+}
 
-  for (const [index, file] of files.entries()) {
+function createImportedImageId(index = 0) {
+  const random = window.crypto?.randomUUID?.().slice(0, 8) || Math.random().toString(36).slice(2, 10);
+  return `img_${Date.now().toString(36)}_${index.toString(36)}_${random}`;
+}
+
+function sourcePathForFile(file) {
+  return file.webkitRelativePath || file.name || "图片";
+}
+
+async function addImageFiles(files, sourcePaths = null) {
+  const imageFiles = Array.from(files || []).filter(isImageFile);
+  const tags = [];
+  const ids = [];
+
+  for (const [index, file] of imageFiles.entries()) {
     const src = await readFileAsDataURL(file);
-    const id = `img_${now}_${index.toString(36)}`;
+    const id = createImportedImageId(index);
     state.images[id] = {
       src,
-      name: file.name,
+      name: file.name || "图片",
+      sourcePath: sourcePaths?.get(file) || sourcePathForFile(file),
       crop: null,
       layout: defaultNewImageLayout(),
     };
+    ids.push(id);
     tags.push(`[[image:${id}]]`);
   }
 
-  updateImageList();
+  return { ids, tags, skipped: Array.from(files || []).length - imageFiles.length };
+}
+
+function insertImageTagsAtCursor(tags) {
+  if (!tags.length) return;
   insertAtSelection(els.content, `\n${tags.join("\n\n")}\n`);
+  updateImageList();
+}
+
+async function handleContentImage(event) {
+  const result = await addImageFiles(event.target.files);
   event.target.value = "";
+  if (!result.tags.length) return;
+  insertImageTagsAtCursor(result.tags);
+  els.status.textContent = `已插入 ${result.tags.length} 张图片`;
+}
+
+function normalizeObsidianImagePath(value) {
+  let path = String(value || "").trim().replace(/^<|>$/g, "");
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    // Keep the original text when the reference contains an incomplete escape sequence.
+  }
+  return path
+    .replace(/\\/g, "/")
+    .replace(/^\.\//, "")
+    .replace(/[?#].*$/, "")
+    .replace(/^\/+/, "")
+    .toLowerCase();
+}
+
+function imageReferenceKeys(reference) {
+  const path = normalizeObsidianImagePath(reference);
+  if (!path) return [];
+  const name = path.split("/").filter(Boolean).pop();
+  return name && name !== path ? [path, name] : [path];
+}
+
+function buildImageReferenceLookup(images) {
+  const lookup = new Map();
+  Object.entries(images || {}).forEach(([id, image]) => {
+    imageReferenceKeys(image?.sourcePath || image?.name).forEach((key) => {
+      if (!lookup.has(key)) lookup.set(key, []);
+      lookup.get(key).push(id);
+    });
+  });
+  return lookup;
+}
+
+function resolveObsidianImageReference(reference, lookup) {
+  const keys = imageReferenceKeys(reference);
+  for (const key of keys) {
+    const ids = lookup.get(key) || [];
+    if (ids.length === 1) return { id: ids[0] };
+    if (ids.length > 1) return { ambiguous: true };
+  }
+  return { missing: true };
+}
+
+function convertObsidianImageReferences(markdown, images) {
+  const lookup = buildImageReferenceLookup(images);
+  const unresolved = new Set();
+  let matched = 0;
+  const replaceReference = (whole, reference) => {
+    const target = String(reference || "").split("|")[0].trim();
+    const result = resolveObsidianImageReference(target, lookup);
+    if (result.id) {
+      matched += 1;
+      return `[[image:${result.id}]]`;
+    }
+    unresolved.add(`${result.ambiguous ? "重复文件名：" : "未找到："}${target}`);
+    return whole;
+  };
+
+  let content = String(markdown || "").replace(/!\[\[([^\]\n]+)\]\]/g, replaceReference);
+  content = content.replace(/!\[[^\]\n]*\]\((?:<([^>]+)>|([^\s)]+))(?:\s+[^)]*)?\)/g, (whole, wrappedPath, plainPath) => {
+    return replaceReference(whole, wrappedPath || plainPath);
+  });
+  return { content, matched, unresolved: Array.from(unresolved) };
+}
+
+function countMarkdownImageReferences(markdown) {
+  const text = String(markdown || "");
+  return (text.match(/!\[\[[^\]\n]+\]\]/g) || []).length + (text.match(/!\[[^\]\n]*\]\([^)]*\)/g) || []).length;
+}
+
+function updateObsidianFileSummary() {
+  if (!els.obsidianFileSummary) return;
+  els.obsidianFileSummary.textContent = pendingObsidianFiles.length
+    ? `已选择 ${pendingObsidianFiles.length} 张图片，导入时会自动匹配`
+    : "可一次放入多张图片，也可拖入附件文件夹";
+}
+
+function addPendingObsidianFiles(files) {
+  const selected = Array.from(files || []).filter(isImageFile);
+  const existing = new Set(pendingObsidianFiles.map((file) => `${sourcePathForFile(file)}:${file.size}:${file.lastModified}`));
+  selected.forEach((file) => {
+    const key = `${sourcePathForFile(file)}:${file.size}:${file.lastModified}`;
+    if (!existing.has(key)) {
+      pendingObsidianFiles.push(file);
+      existing.add(key);
+    }
+  });
+  updateObsidianFileSummary();
+}
+
+function openObsidianVaultDatabase() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) {
+      reject(new Error("浏览器不支持本地仓库授权保存"));
+      return;
+    }
+    const request = window.indexedDB.open(OBSIDIAN_VAULT_DB, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore(OBSIDIAN_VAULT_STORE);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function readStoredObsidianVault() {
+  const db = await openObsidianVaultDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(OBSIDIAN_VAULT_STORE, "readonly");
+    const request = transaction.objectStore(OBSIDIAN_VAULT_STORE).get(OBSIDIAN_VAULT_KEY);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveObsidianVault(handle) {
+  const db = await openObsidianVaultDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(OBSIDIAN_VAULT_STORE, "readwrite");
+    transaction.objectStore(OBSIDIAN_VAULT_STORE).put(handle, OBSIDIAN_VAULT_KEY);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+}
+
+function setObsidianVaultStatus(message, connected = false) {
+  els.obsidianVaultStatus.textContent = message;
+  els.obsidianVaultStatus.parentElement?.classList.toggle("is-connected", connected);
+  els.connectObsidianVault.innerHTML = connected
+    ? '<i data-lucide="folder-cog"></i> 更换仓库'
+    : '<i data-lucide="folder-open"></i> 连接 Obsidian 仓库';
+  if (window.lucide) window.lucide.createIcons();
+}
+
+async function loadObsidianVaultConnection() {
+  try {
+    const handle = await readStoredObsidianVault();
+    if (!handle) return;
+    obsidianVault.handle = handle;
+    const permission = await handle.queryPermission({ mode: "read" });
+    setObsidianVaultStatus(permission === "granted" ? `已连接：${handle.name}` : `已记住：${handle.name}（首次粘贴时确认读取）`, permission === "granted");
+  } catch {
+    setObsidianVaultStatus("尚未连接仓库");
+  }
+}
+
+async function connectObsidianVault() {
+  if (!window.showDirectoryPicker) {
+    setObsidianVaultStatus("请用 Chrome 打开部署后的网页后连接仓库。");
+    return;
+  }
+  try {
+    const handle = await window.showDirectoryPicker({ mode: "read" });
+    obsidianVault.handle = handle;
+    await saveObsidianVault(handle);
+    setObsidianVaultStatus(`已连接：${handle.name}`, true);
+    els.obsidianImportStatus.textContent = "仓库已连接。以后直接把 Obsidian Markdown 粘贴到正文编辑区即可。";
+  } catch (error) {
+    if (error?.name !== "AbortError") setObsidianVaultStatus("连接失败，请重新选择 Obsidian 仓库根目录。");
+  }
+}
+
+async function ensureObsidianVaultPermission() {
+  if (!obsidianVault.handle) return false;
+  let permission = await obsidianVault.handle.queryPermission({ mode: "read" });
+  if (permission !== "granted") permission = await obsidianVault.handle.requestPermission({ mode: "read" });
+  const granted = permission === "granted";
+  setObsidianVaultStatus(granted ? `已连接：${obsidianVault.handle.name}` : `需要允许读取：${obsidianVault.handle.name}`, granted);
+  return granted;
+}
+
+function extractMarkdownImageReferences(markdown) {
+  const references = new Set();
+  const text = String(markdown || "");
+  for (const match of text.matchAll(/!\[\[([^\]\n]+)\]\]/g)) {
+    references.add(match[1].split("|")[0].trim());
+  }
+  for (const match of text.matchAll(/!\[[^\]\n]*\]\((?:<([^>]+)>|([^\s)]+))(?:\s+[^)]*)?\)/g)) {
+    references.add((match[1] || match[2] || "").trim());
+  }
+  return Array.from(references).filter(Boolean);
+}
+
+function vaultReferenceParts(reference) {
+  let path = String(reference || "").trim().replace(/^<|>$/g, "");
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    // Keep the original text when the reference contains an incomplete escape sequence.
+  }
+  return path
+    .replace(/\\/g, "/")
+    .replace(/^\.\//, "")
+    .replace(/[?#].*$/, "")
+    .replace(/^\/+/, "")
+    .split("/")
+    .filter(Boolean);
+}
+
+async function findFileInObsidianVault(reference) {
+  if (/^https?:/i.test(String(reference || ""))) return null;
+  const parts = vaultReferenceParts(reference);
+  if (!parts.length) return null;
+  try {
+    let directory = obsidianVault.handle;
+    for (const part of parts.slice(0, -1)) directory = await directory.getDirectoryHandle(part);
+    return await directory.getFileHandle(parts[parts.length - 1]);
+  } catch {
+    return findObsidianFileByName(obsidianVault.handle, parts[parts.length - 1]);
+  }
+}
+
+async function findObsidianFileByName(directory, name) {
+  if (!directory || !name) return null;
+  for await (const [entryName, handle] of directory.entries()) {
+    if (handle.kind === "file" && entryName.toLowerCase() === name.toLowerCase()) return handle;
+    if (handle.kind === "directory" && ![".git", ".obsidian", "node_modules"].includes(entryName)) {
+      const found = await findObsidianFileByName(handle, name);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function replaceEditorContent(content) {
+  commitTextHistory();
+  els.content.value = content;
+  els.content.focus();
+  els.content.setSelectionRange(0, 0);
+  commitTextHistory();
+  updateImageList();
+  requestRender();
+}
+
+function closeObsidianImportMenu() {
+  els.obsidianImportMenu.open = false;
+  els.obsidianMarkdown.value = "";
+  els.obsidianImportStatus.textContent = "图片会按文件名自动匹配；有缺失时不会导入成品。";
+}
+
+function previewObsidianDraft() {
+  const markdown = els.obsidianMarkdown.value;
+  if (!markdown.trim()) return;
+  // Keep the original Obsidian source in the editor. The renderer resolves image
+  // references from the image library, so later edits remain a true live preview.
+  els.content.value = markdown;
+  scheduleTextHistoryCommit();
+  requestRender();
+  if (countMarkdownImageReferences(markdown)) {
+    els.obsidianImportStatus.textContent = "正在实时预览；图片会在导入时自动从已连接的仓库读取。";
+  }
+}
+
+async function importMarkdownFromConnectedVault(markdown) {
+  if (!obsidianVault.handle || obsidianVault.importing) return false;
+  obsidianVault.importing = true;
+  els.status.textContent = "正在从 Obsidian 仓库读取图片…";
+  try {
+    if (!(await ensureObsidianVaultPermission())) {
+      els.status.textContent = "未获得仓库读取权限，请重新连接后再试。";
+      return true;
+    }
+    const lookup = buildImageReferenceLookup(state.images);
+    const files = [];
+    const sourcePaths = new Map();
+    const missing = [];
+    for (const reference of extractMarkdownImageReferences(markdown)) {
+      if (resolveObsidianImageReference(reference, lookup).id) continue;
+      const handle = await findFileInObsidianVault(reference);
+      if (!handle) {
+        missing.push(reference);
+        continue;
+      }
+      const file = await handle.getFile();
+      files.push(file);
+      sourcePaths.set(file, reference);
+    }
+    if (missing.length) {
+      const message = `仓库已连接，但没有找到 ${missing.length} 张图片：${missing.slice(0, 3).join("、")}。请确认选择的是包含这些路径的 Obsidian 仓库根目录。`;
+      els.obsidianMarkdown.value = markdown;
+      els.obsidianImportMenu.open = true;
+      els.obsidianImportStatus.textContent = message;
+      els.status.textContent = message;
+      return true;
+    }
+    const imported = await addImageFiles(files, sourcePaths);
+    const converted = convertObsidianImageReferences(markdown, state.images);
+    if (converted.unresolved.length) {
+      els.status.textContent = "发现重名图片，暂时无法自动判断该用哪一张。";
+      return true;
+    }
+    replaceEditorContent(markdown);
+    els.status.textContent = `已从仓库自动读取 ${imported.ids.length} 张图片并完成导入`;
+    closeObsidianImportMenu();
+    return true;
+  } catch (error) {
+    console.error(error);
+    els.status.textContent = "读取 Obsidian 仓库失败，请重新连接仓库后再试。";
+    return true;
+  } finally {
+    obsidianVault.importing = false;
+  }
+}
+
+function readDroppedEntry(entry) {
+  if (!entry) return Promise.resolve([]);
+  if (entry.isFile) {
+    return new Promise((resolve) => entry.file((file) => resolve([file]), () => resolve([])));
+  }
+  if (!entry.isDirectory) return Promise.resolve([]);
+  const reader = entry.createReader();
+  const readBatch = () => new Promise((resolve) => reader.readEntries(resolve, () => resolve([])));
+  const readAll = async () => {
+    const entries = [];
+    let batch;
+    do {
+      batch = await readBatch();
+      entries.push(...batch);
+    } while (batch.length);
+    return (await Promise.all(entries.map(readDroppedEntry))).flat();
+  };
+  return readAll();
+}
+
+async function getDroppedFiles(dataTransfer) {
+  const entries = Array.from(dataTransfer?.items || [])
+    .map((item) => item.webkitGetAsEntry?.())
+    .filter(Boolean);
+  if (entries.length) return (await Promise.all(entries.map(readDroppedEntry))).flat();
+  return Array.from(dataTransfer?.files || []);
+}
+
+async function importObsidianDocument() {
+  const markdown = els.obsidianMarkdown.value.trim();
+  if (!markdown) {
+    els.obsidianImportStatus.textContent = "先把 Obsidian 正文粘贴到上方。";
+    return;
+  }
+
+  if (obsidianVault.handle && !pendingObsidianFiles.length) {
+    await importMarkdownFromConnectedVault(markdown);
+    return;
+  }
+
+  els.obsidianImport.disabled = true;
+  els.obsidianImportStatus.textContent = "正在读取图片并匹配正文…";
+  try {
+    const imported = await addImageFiles(pendingObsidianFiles);
+    pendingObsidianFiles = [];
+    els.obsidianImage.value = "";
+    updateObsidianFileSummary();
+    const converted = convertObsidianImageReferences(markdown, state.images);
+    if (converted.unresolved.length) {
+      const summary = `已读入 ${imported.ids.length} 张图片，但还有 ${converted.unresolved.length} 处未匹配（${converted.unresolved.slice(0, 3).join("、")}）。请继续拖入缺少的图片后再点导入。`;
+      els.obsidianImportStatus.textContent = summary;
+      els.status.textContent = summary;
+      return;
+    }
+    replaceEditorContent(markdown);
+
+    const skippedText = imported.skipped ? `；忽略 ${imported.skipped} 个非图片文件` : "";
+    const summary = `已导入正文，加入 ${imported.ids.length} 张图片，匹配 ${converted.matched} 处${skippedText}`;
+    els.obsidianImportStatus.textContent = summary;
+    els.status.textContent = summary;
+    closeObsidianImportMenu();
+  } catch (error) {
+    console.error(error);
+    els.obsidianImportStatus.textContent = "导入失败，请检查图片格式后重试。";
+  } finally {
+    els.obsidianImport.disabled = false;
+  }
+}
+
+async function handleEditorPaste(event) {
+  const files = Array.from(event.clipboardData?.items || [])
+    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter(Boolean);
+  if (!files.length) {
+    const markdown = event.clipboardData?.getData("text/plain") || "";
+    const references = countMarkdownImageReferences(markdown);
+    if (!references) return;
+    event.preventDefault();
+    if (obsidianVault.handle) {
+      await importMarkdownFromConnectedVault(markdown);
+      return;
+    }
+    els.obsidianMarkdown.value = markdown;
+    els.obsidianImportMenu.open = true;
+    els.obsidianImportStatus.textContent = `检测到 ${references} 个 Obsidian 图片引用。请拖入这篇文章的图片附件，再点“导入并替换正文”。`;
+    requestAnimationFrame(() => positionToolPopover(els.obsidianImportMenu));
+    return;
+  }
+  event.preventDefault();
+  const imported = await addImageFiles(files);
+  insertImageTagsAtCursor(imported.tags);
+  els.status.textContent = `已粘贴 ${imported.tags.length} 张图片`;
+}
+
+async function handleEditorDrop(event) {
+  const hasFiles = Array.from(event.dataTransfer?.types || []).includes("Files");
+  if (!hasFiles) return;
+  event.preventDefault();
+  const files = await getDroppedFiles(event.dataTransfer);
+  if (!files.some(isImageFile)) return;
+  const imported = await addImageFiles(files);
+  insertImageTagsAtCursor(imported.tags);
+  els.status.textContent = `已插入 ${imported.tags.length} 张图片`;
 }
 
 async function handleAvatar(event) {
@@ -1867,12 +2319,36 @@ function resizeCropRect(handle, startRect, point, image, aspect) {
   return fitRectToAspect({ x, y, width, height }, image, aspect);
 }
 
-function parseBlocks(content) {
+function resolveMarkdownImageBlock(line, imageLookup) {
+  const internal = line.match(/^\[\[image:([\w-]+)\]\]$/);
+  if (internal) return internal[1];
+
+  const obsidian = line.match(/^!\[\[([^\]\n]+)\]\]$/);
+  if (obsidian) return resolveObsidianImageReference(obsidian[1].split("|")[0].trim(), imageLookup).id || null;
+
+  const markdown = line.match(/^!\[[^\]\n]*\]\((?:<([^>]+)>|([^\s)]+))(?:\s+[^)]*)?\)$/);
+  if (markdown) return resolveObsidianImageReference(markdown[1] || markdown[2], imageLookup).id || null;
+  return null;
+}
+
+function isMarkdownImageBlock(line) {
+  return /^\[\[image:[\w-]+\]\]$/.test(line)
+    || /^!\[\[[^\]\n]+\]\]$/.test(line)
+    || /^!\[[^\]\n]*\]\((?:<[^>]+>|[^\s)]+)(?:\s+[^)]*)?\)$/.test(line);
+}
+
+function parseBlocks(content, images = {}) {
   const normalized = content.replace(/\r\n/g, "\n");
-  const lines = normalized.match(/[^\n]*(?:\n|$)/g) || [];
+  const lines = normalized.split("\n");
+  const imageLookup = buildImageReferenceLookup(images);
+  const lineOffsets = [];
+  let runningOffset = 0;
+  lines.forEach((line) => {
+    lineOffsets.push(runningOffset);
+    runningOffset += line.length + 1;
+  });
   const blocks = [];
   let paragraphLines = [];
-  let offset = 0;
 
   const flushParagraph = () => {
     if (!paragraphLines.length) return;
@@ -1880,45 +2356,78 @@ function parseBlocks(content) {
     paragraphLines = [];
   };
 
-  for (const rawLine of lines) {
-    const line = rawLine.endsWith("\n") ? rawLine.slice(0, -1) : rawLine;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
     const leading = line.match(/^\s*/)[0].length;
     const trailing = line.match(/\s*$/)[0].length;
     const trimmed = line.slice(leading, line.length - trailing);
-    const trimmedStart = offset + leading;
+    const trimmedStart = lineOffsets[index] + leading;
 
     if (trimmed) {
-      const imageInline = trimmed.match(/^\[\[image:([\w-]+)\]\]$/);
-      if (imageInline) {
+      const imageId = resolveMarkdownImageBlock(trimmed, imageLookup);
+      if (isMarkdownImageBlock(trimmed)) {
         flushParagraph();
-        blocks.push({ type: "image", id: imageInline[1] });
-      } else if (trimmed.startsWith("# ")) {
+        if (imageId) blocks.push({ type: "image", id: imageId });
+      } else if (isMarkdownTableHeader(trimmed, lines[index + 1])) {
         flushParagraph();
-        const contentStart = trimmedStart + 2 + countLeadingSpaces(trimmed.slice(2));
-        blocks.push({ type: "h1", tokens: parseInline(trimmed.slice(2).trim(), contentStart) });
-      } else if (trimmed.startsWith("## ")) {
-        flushParagraph();
-        const contentStart = trimmedStart + 3 + countLeadingSpaces(trimmed.slice(3));
-        blocks.push({ type: "h2", tokens: parseInline(trimmed.slice(3).trim(), contentStart) });
-      } else if (trimmed.startsWith("> ")) {
-        flushParagraph();
-        const contentStart = trimmedStart + 2 + countLeadingSpaces(trimmed.slice(2));
-        blocks.push({ type: "quote", tokens: parseInline(trimmed.slice(2).trim(), contentStart) });
+        const headerCells = splitMarkdownTableRow(trimmed);
+        const rows = [];
+        let rowIndex = index + 2;
+        while (rowIndex < lines.length) {
+          const cells = splitMarkdownTableRow(lines[rowIndex].trim());
+          if (!cells || !cells.length) break;
+          rows.push(cells.map((cell) => parseInline(cell)));
+          rowIndex += 1;
+        }
+        blocks.push({ type: "table", header: headerCells.map((cell) => parseInline(cell)), rows });
+        index = rowIndex - 1;
       } else {
-        paragraphLines.push(parseInline(trimmed, trimmedStart));
+        const heading = trimmed.match(/^(#{1,6})\s+(.+)$/);
+        if (heading) {
+          flushParagraph();
+          const level = heading[1].length;
+          const contentStart = trimmedStart + heading[1].length + 1;
+          blocks.push({ type: level === 1 ? "h1" : level === 2 ? "h2" : "h3", tokens: parseInline(heading[2].trim(), contentStart) });
+        } else if (trimmed.startsWith("> ")) {
+          flushParagraph();
+          const contentStart = trimmedStart + 2 + countLeadingSpaces(trimmed.slice(2));
+          blocks.push({ type: "quote", tokens: parseInline(trimmed.slice(2).trim(), contentStart) });
+        } else if (/^([-*+]\s+|\d+[.)]\s+)/.test(trimmed)) {
+          const text = trimmed.replace(/^([-*+]\s+|\d+[.)]\s+)/, "• ");
+          paragraphLines.push(parseInline(text, trimmedStart));
+        } else if (/^([-*_])(?:\s*\1){2,}\s*$/.test(trimmed)) {
+          flushParagraph();
+          blocks.push({ type: "spacer" });
+        } else {
+          paragraphLines.push(parseInline(trimmed, trimmedStart));
+        }
       }
     } else {
       flushParagraph();
-      if (rawLine.length > 0) {
+      if (line.length > 0) {
         blocks.push({ type: "spacer" });
       }
     }
-
-    offset += rawLine.length;
   }
 
   flushParagraph();
   return blocks;
+}
+
+function splitMarkdownTableRow(line) {
+  const value = String(line || "").trim();
+  if (!value.includes("|")) return null;
+  const cells = value.replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+  return cells.length > 1 ? cells : null;
+}
+
+function isMarkdownTableDivider(line) {
+  const cells = splitMarkdownTableRow(line);
+  return Boolean(cells?.length) && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function isMarkdownTableHeader(line, nextLine) {
+  return Boolean(splitMarkdownTableRow(line)?.length) && isMarkdownTableDivider(nextLine);
 }
 
 function countLeadingSpaces(text) {
@@ -2012,6 +2521,18 @@ function styleForBlock(type, settings) {
       italic: false,
       marginTop: 20,
       marginBottom: 6,
+      color: settings.textColor,
+    };
+  }
+  if (type === "h3") {
+    return {
+      ...fontSettings,
+      size: Math.round(baseSize * 1.02),
+      lineHeight: 1.55,
+      weight: 620,
+      italic: false,
+      marginTop: 16,
+      marginBottom: 4,
       color: settings.textColor,
     };
   }
@@ -2165,6 +2686,39 @@ function wrapBlockLines(ctx, block, style, maxWidth) {
   return lines;
 }
 
+function buildTableLayout(ctx, block, settings, maxWidth) {
+  const columns = Math.max(1, block.header.length, ...block.rows.map((row) => row.length));
+  const cellWidth = maxWidth / columns;
+  const headerStyle = {
+    ...styleForBlock("h3", settings),
+    size: Math.max(18, Math.round(settings.fontSize * 0.76)),
+    lineHeight: 1.35,
+  };
+  const bodyStyle = {
+    ...styleForBlock("p", settings),
+    size: Math.max(17, Math.round(settings.fontSize * 0.72)),
+    lineHeight: 1.4,
+  };
+  const rowPadding = 10;
+  const makeRow = (cells, style) => {
+    const lines = Array.from({ length: columns }, (_, index) => wrapTokens(ctx, cells[index] || [], style, Math.max(34, cellWidth - rowPadding * 2)));
+    const lineHeight = Math.ceil(style.size * style.lineHeight);
+    return {
+      cells: lines,
+      style,
+      lineHeight,
+      height: Math.max(lineHeight, ...lines.map((cellLines) => cellLines.length * lineHeight)) + rowPadding * 2,
+    };
+  };
+  const rows = [makeRow(block.header, headerStyle), ...block.rows.map((row) => makeRow(row, bodyStyle))];
+  return {
+    columns,
+    cellWidth,
+    rows,
+    height: rows.reduce((total, row) => total + row.height, 0),
+  };
+}
+
 function blankLineGap(settings) {
   return Math.max(18, Math.ceil(settings.fontSize * 0.8));
 }
@@ -2243,7 +2797,7 @@ function contentBoundsForHeader(showHeader) {
 async function buildPages(settings) {
   const measureCanvas = document.createElement("canvas");
   const ctx = measureCanvas.getContext("2d");
-  const blocks = parseBlocks(settings.content);
+  const blocks = parseBlocks(settings.content, settings.images);
   const avatar = await loadImage(settings.avatar).catch(() => null);
   const badge = await loadImage(verifiedBadgeSrc).catch(() => null);
   const imageCache = {};
@@ -2291,6 +2845,16 @@ async function buildPages(settings) {
       ensureSpace(spacerHeight, 0);
       y += spacerHeight;
       previousBlockType = "spacer";
+      continue;
+    }
+
+    if (block.type === "table") {
+      const table = buildTableLayout(ctx, block, settings, contentWidth);
+      ensureSpace(table.height, hasContent && previousBlockType !== "spacer" ? 18 : 0);
+      page.items.push({ type: "table", x: page.bounds.left, y, width: contentWidth, table });
+      y += table.height + 18;
+      hasContent = true;
+      previousBlockType = "table";
       continue;
     }
 
@@ -2361,7 +2925,7 @@ async function buildPages(settings) {
 async function buildScrollPage(settings) {
   const measureCanvas = document.createElement("canvas");
   const ctx = measureCanvas.getContext("2d");
-  const blocks = parseBlocks(settings.content);
+  const blocks = parseBlocks(settings.content, settings.images);
   const avatar = await loadImage(settings.avatar).catch(() => null);
   const badge = await loadImage(verifiedBadgeSrc).catch(() => null);
   const imageCache = {};
@@ -2386,6 +2950,16 @@ async function buildScrollPage(settings) {
     if (block.type === "spacer") {
       y += blankLineGap(settings);
       previousBlockType = "spacer";
+      continue;
+    }
+
+    if (block.type === "table") {
+      const table = buildTableLayout(ctx, block, settings, contentWidth);
+      y += hasContent && previousBlockType !== "spacer" ? 18 : 0;
+      page.items.push({ type: "table", x: bounds.left, y, width: contentWidth, table });
+      y += table.height + 18;
+      hasContent = true;
+      previousBlockType = "table";
       continue;
     }
 
@@ -2495,6 +3069,7 @@ function drawPageToContext(ctx, page, scrollPage = false) {
   if (!scrollPage) {
     for (const item of page.items) {
       if (item.type === "image") drawImageBlock(ctx, item);
+      if (item.type === "table") drawTableBlock(ctx, item, page.settings);
       if (item.type === "text") drawTextLine(ctx, item, page.settings);
     }
     return;
@@ -2508,6 +3083,7 @@ function drawPageToContext(ctx, page, scrollPage = false) {
   ctx.translate(0, bounds.top - page.scrollOffset);
   for (const item of page.items) {
     if (item.type === "image") drawImageBlock(ctx, item);
+    if (item.type === "table") drawTableBlock(ctx, item, page.settings);
     if (item.type === "text") drawTextLine(ctx, item, page.settings);
   }
   ctx.restore();
@@ -2669,6 +3245,38 @@ function drawImageBlock(ctx, item) {
   ctx.restore();
 }
 
+function drawTableBlock(ctx, item, settings) {
+  const { table } = item;
+  let y = item.y;
+  const darkCard = isDarkHexColor(settings.bgColor);
+  ctx.save();
+  for (const [rowIndex, row] of table.rows.entries()) {
+    if (rowIndex === 0) {
+      ctx.fillStyle = darkCard ? "rgba(255,255,255,.16)" : "rgba(43,127,216,.13)";
+      ctx.fillRect(item.x, y, item.width, row.height);
+    }
+    for (let column = 0; column < table.columns; column += 1) {
+      const x = item.x + column * table.cellWidth;
+      ctx.strokeStyle = darkCard ? "rgba(255,255,255,.24)" : "rgba(32,41,56,.18)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 0.5, y + 0.5, table.cellWidth, row.height);
+      let lineY = y + 10;
+      for (const line of row.cells[column]) {
+        drawTextLine(ctx, {
+          style: row.style,
+          line,
+          x: x + 10,
+          y: lineY,
+          lineHeight: row.lineHeight,
+        }, settings);
+        lineY += row.lineHeight;
+      }
+    }
+    y += row.height;
+  }
+  ctx.restore();
+}
+
 function drawTextLine(ctx, item, settings) {
   const { style, line, x, y, lineHeight } = item;
   if (style.quote) {
@@ -2766,6 +3374,7 @@ function renderArticlePreview(settings) {
 
 function markdownToArticleHtml(markdown, images = {}) {
   const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+  const imageLookup = buildImageReferenceLookup(images);
   const html = [];
   let paragraph = [];
   let list = [];
@@ -2788,7 +3397,12 @@ function markdownToArticleHtml(markdown, images = {}) {
     code = [];
   };
 
-  for (const line of lines) {
+  const flushTable = (header, rows) => {
+    html.push(`<div class="article-table-wrap"><table><thead><tr>${header.map((cell) => `<th>${renderArticleInline(cell)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${header.map((_, index) => `<td>${renderArticleInline(row[index] || "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
     const trimmed = line.trim();
     if (trimmed.startsWith("```")) {
       if (inCode) {
@@ -2811,20 +3425,37 @@ function markdownToArticleHtml(markdown, images = {}) {
       continue;
     }
 
-    const imageMatch = trimmed.match(/^\[\[image:([\w-]+)\]\]$/);
-    if (imageMatch) {
+    if (isMarkdownTableHeader(trimmed, lines[index + 1])) {
       flushParagraph();
       flushList();
-      const image = images[imageMatch[1]];
+      const header = splitMarkdownTableRow(trimmed);
+      const rows = [];
+      let rowIndex = index + 2;
+      while (rowIndex < lines.length) {
+        const row = splitMarkdownTableRow(lines[rowIndex].trim());
+        if (!row) break;
+        rows.push(row);
+        rowIndex += 1;
+      }
+      flushTable(header, rows);
+      index = rowIndex - 1;
+      continue;
+    }
+
+    const imageId = resolveMarkdownImageBlock(trimmed, imageLookup);
+    if (isMarkdownImageBlock(trimmed)) {
+      flushParagraph();
+      flushList();
+      const image = images[imageId];
       if (image?.src) html.push(`<figure><img src="${escapeAttribute(image.src)}" alt="${escapeAttribute(image.name || "图片")}" /></figure>`);
       continue;
     }
 
-    const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+    const heading = trimmed.match(/^(#{1,6})\s+(.+)$/);
     if (heading) {
       flushParagraph();
       flushList();
-      const level = heading[1].length;
+      const level = Math.min(3, heading[1].length);
       html.push(`<h${level}>${renderArticleInline(heading[2])}</h${level}>`);
       continue;
     }
@@ -2836,7 +3467,7 @@ function markdownToArticleHtml(markdown, images = {}) {
       continue;
     }
 
-    const listMatch = trimmed.match(/^[-*]\s+(.+)$/);
+    const listMatch = trimmed.match(/^[-*+]\s+(.+)$/);
     if (listMatch) {
       flushParagraph();
       list.push(listMatch[1]);
@@ -3419,6 +4050,11 @@ function bindEvents() {
     requestRender();
   });
   els.content.addEventListener("keydown", handleTextShortcut);
+  els.content.addEventListener("paste", handleEditorPaste);
+  els.content.addEventListener("dragover", (event) => {
+    if (Array.from(event.dataTransfer?.types || []).includes("Files")) event.preventDefault();
+  });
+  els.content.addEventListener("drop", handleEditorDrop);
 
   [
     els.displayName,
@@ -3454,6 +4090,28 @@ function bindEvents() {
     }
   });
   els.contentImage.addEventListener("change", handleContentImage);
+  els.connectObsidianVault.addEventListener("click", connectObsidianVault);
+  els.obsidianMarkdown.addEventListener("input", debounce(previewObsidianDraft, 180));
+  els.obsidianImage.addEventListener("change", (event) => {
+    addPendingObsidianFiles(event.target.files);
+    event.target.value = "";
+  });
+  els.obsidianImport.addEventListener("click", importObsidianDocument);
+  ["dragenter", "dragover"].forEach((eventName) => {
+    els.obsidianDropZone.addEventListener(eventName, (event) => {
+      if (!Array.from(event.dataTransfer?.types || []).includes("Files")) return;
+      event.preventDefault();
+      els.obsidianDropZone.classList.add("drag-over");
+    });
+  });
+  ["dragleave", "dragend"].forEach((eventName) => {
+    els.obsidianDropZone.addEventListener(eventName, () => els.obsidianDropZone.classList.remove("drag-over"));
+  });
+  els.obsidianDropZone.addEventListener("drop", async (event) => {
+    event.preventDefault();
+    els.obsidianDropZone.classList.remove("drag-over");
+    addPendingObsidianFiles(await getDroppedFiles(event.dataTransfer));
+  });
   els.applyImageWidth?.addEventListener("click", applyImageWidthToAll);
   els.applyFixedImageSize?.addEventListener("click", applyFixedImageSizeToAll);
   els.avatarInput.addEventListener("change", handleAvatar);
@@ -3503,6 +4161,7 @@ resetTextHistory();
 updateProjectHistory();
 bindEvents();
 render();
+void loadObsidianVaultConnection();
 
 if (window.lucide) {
   window.lucide.createIcons();
