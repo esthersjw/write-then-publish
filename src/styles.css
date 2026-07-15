@@ -857,8 +857,7 @@ body[data-app-mode="article"] .profile-inline {
   font-size: 14px;
 }
 
-.obsidian-import-heading span,
-.obsidian-import-status {
+.obsidian-import-heading span {
   margin: 0;
   color: var(--muted);
   font-size: 12px;
@@ -866,7 +865,6 @@ body[data-app-mode="article"] .profile-inline {
 }
 
 .obsidian-direct-paste-hint {
-  display: none;
   margin: 0;
   padding: 10px 11px;
   border-left: 3px solid var(--accent);
@@ -875,19 +873,6 @@ body[data-app-mode="article"] .profile-inline {
   font-size: 12px;
   font-weight: 650;
   line-height: 1.55;
-}
-
-.obsidian-manual-import {
-  display: grid;
-  gap: 10px;
-}
-
-.obsidian-import-menu.is-vault-connected .obsidian-direct-paste-hint {
-  display: block;
-}
-
-.obsidian-import-menu.is-vault-connected .obsidian-manual-import {
-  display: none;
 }
 
 .obsidian-vault-row {
@@ -918,63 +903,6 @@ body[data-app-mode="article"] .profile-inline {
 
 .obsidian-vault-row.is-connected {
   border-color: color-mix(in srgb, var(--accent) 46%, var(--line));
-}
-
-.obsidian-markdown-input {
-  min-height: 154px;
-  padding: 10px 11px;
-  resize: vertical;
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.obsidian-drop-zone {
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  min-height: 66px;
-  padding: 10px 12px;
-  border: 1px dashed var(--line);
-  border-radius: 8px;
-  color: var(--control-text);
-  background: var(--soft);
-  cursor: pointer;
-  transition: border-color 120ms ease, background 120ms ease;
-}
-
-.obsidian-drop-zone:hover,
-.obsidian-drop-zone.drag-over {
-  border-color: var(--active-border);
-  background: color-mix(in srgb, var(--active-bg) 8%, var(--soft));
-}
-
-.obsidian-drop-zone input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.obsidian-drop-zone > svg {
-  width: 22px;
-  height: 22px;
-  color: var(--accent);
-}
-
-.obsidian-drop-zone span {
-  display: grid;
-  gap: 2px;
-}
-
-.obsidian-drop-zone b {
-  font-size: 12px;
-}
-
-.obsidian-drop-zone small {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
 }
 
 .image-batch-controls {
