@@ -50,6 +50,7 @@ const els = {
   contentImage: $("#contentImageInput"),
   obsidianImportMenu: $("#obsidianImportMenu"),
   connectObsidianVault: $("#connectObsidianVaultBtn"),
+  obsidianVaultFolder: $("#obsidianVaultFolderInput"),
   obsidianVaultStatus: $("#obsidianVaultStatus"),
   inlineColor: $("#inlineColorInput"),
   inlineBgColor: $("#inlineBgColorInput"),
@@ -245,6 +246,7 @@ const cropper = {
 let imageEditDrag = null;
 const obsidianVault = {
   handle: null,
+  fileLookup: null,
   loading: false,
   importing: false,
 };
@@ -1516,7 +1518,42 @@ function setObsidianVaultStatus(message, connected = false) {
   if (window.lucide) window.lucide.createIcons();
 }
 
+function canUseDirectoryPickerSafely() {
+  const userAgent = navigator.userAgent || "";
+  const embeddedBrowser = /Electron|Codex|ChatGPT|OpenAI/i.test(userAgent);
+  const localPage = ["localhost", "127.0.0.1", ""].includes(window.location.hostname) || window.location.protocol === "file:";
+  return Boolean(window.showDirectoryPicker && window.isSecureContext && !embeddedBrowser && !localPage);
+}
+
+function hasConnectedObsidianVault() {
+  return Boolean(obsidianVault.handle || obsidianVault.fileLookup);
+}
+
+function buildVaultFileLookup(files) {
+  const lookup = new Map();
+  Array.from(files || []).filter(isImageFile).forEach((file) => {
+    imageReferenceKeys(sourcePathForFile(file)).forEach((key) => {
+      if (!lookup.has(key)) lookup.set(key, []);
+      lookup.get(key).push(file);
+    });
+  });
+  return lookup;
+}
+
+function findFileInSelectedVault(reference) {
+  if (!obsidianVault.fileLookup) return null;
+  for (const key of imageReferenceKeys(reference)) {
+    const files = obsidianVault.fileLookup.get(key) || [];
+    if (files.length === 1) return files[0];
+  }
+  return null;
+}
+
 async function loadObsidianVaultConnection() {
+  if (!canUseDirectoryPickerSafely()) {
+    setObsidianVaultStatus("点击连接仓库后选择 Obsidian 文件夹");
+    return;
+  }
   try {
     const handle = await readStoredObsidianVault();
     if (!handle) return;
@@ -1529,13 +1566,14 @@ async function loadObsidianVaultConnection() {
 }
 
 async function connectObsidianVault() {
-  if (!window.showDirectoryPicker) {
-    setObsidianVaultStatus("请用 Chrome 打开部署后的网页后连接仓库。");
+  if (!canUseDirectoryPickerSafely()) {
+    els.obsidianVaultFolder?.click();
     return;
   }
   try {
     const handle = await window.showDirectoryPicker({ mode: "read" });
     obsidianVault.handle = handle;
+    obsidianVault.fileLookup = null;
     await saveObsidianVault(handle);
     setObsidianVaultStatus(`已连接：${handle.name}`, true);
     els.status.textContent = "仓库已连接。以后直接把 Obsidian Markdown 粘贴到正文编辑区即可。";
@@ -1544,7 +1582,19 @@ async function connectObsidianVault() {
   }
 }
 
+function handleObsidianVaultFolder(event) {
+  const files = Array.from(event.target.files || []);
+  event.target.value = "";
+  if (!files.length) return;
+  const rootName = files[0]?.webkitRelativePath?.split("/")?.[0] || "已选择的仓库";
+  obsidianVault.handle = null;
+  obsidianVault.fileLookup = buildVaultFileLookup(files);
+  setObsidianVaultStatus(`已连接：${rootName}`, true);
+  els.status.textContent = "仓库已连接。以后直接把 Obsidian Markdown 粘贴到正文编辑区即可。";
+}
+
 async function ensureObsidianVaultPermission() {
+  if (obsidianVault.fileLookup) return true;
   if (!obsidianVault.handle) return false;
   let permission = await obsidianVault.handle.queryPermission({ mode: "read" });
   if (permission !== "granted") permission = await obsidianVault.handle.requestPermission({ mode: "read" });
@@ -1621,7 +1671,7 @@ function closeObsidianImportMenu() {
 }
 
 async function importMarkdownFromConnectedVault(markdown) {
-  if (!obsidianVault.handle || obsidianVault.importing) return false;
+  if (!hasConnectedObsidianVault() || obsidianVault.importing) return false;
   obsidianVault.importing = true;
   els.status.textContent = "正在从 Obsidian 仓库读取图片…";
   try {
@@ -1635,7 +1685,13 @@ async function importMarkdownFromConnectedVault(markdown) {
     const missing = [];
     for (const reference of extractMarkdownImageReferences(markdown)) {
       if (resolveObsidianImageReference(reference, lookup).id) continue;
-      const handle = await findFileInObsidianVault(reference);
+      const selectedFile = findFileInSelectedVault(reference);
+      if (selectedFile) {
+        files.push(selectedFile);
+        sourcePaths.set(selectedFile, reference);
+        continue;
+      }
+      const handle = obsidianVault.handle ? await findFileInObsidianVault(reference) : null;
       if (!handle) {
         missing.push(reference);
         continue;
@@ -1646,6 +1702,7 @@ async function importMarkdownFromConnectedVault(markdown) {
     }
     if (missing.length) {
       const message = `仓库已连接，但没有找到 ${missing.length} 张图片：${missing.slice(0, 3).join("、")}。请确认选择的是包含这些路径的 Obsidian 仓库根目录。`;
+      replaceEditorContent(markdown);
       els.obsidianImportMenu.open = true;
       els.status.textContent = message;
       return true;
@@ -1662,6 +1719,7 @@ async function importMarkdownFromConnectedVault(markdown) {
     return true;
   } catch (error) {
     console.error(error);
+    replaceEditorContent(markdown);
     els.status.textContent = "读取 Obsidian 仓库失败，请重新连接仓库后再试。";
     return true;
   } finally {
@@ -1707,7 +1765,7 @@ async function handleEditorPaste(event) {
     const references = countMarkdownImageReferences(markdown);
     if (!references) return;
     event.preventDefault();
-    if (obsidianVault.handle) {
+    if (hasConnectedObsidianVault()) {
       await importMarkdownFromConnectedVault(markdown);
       return;
     }
@@ -4011,6 +4069,7 @@ function bindEvents() {
   });
   els.contentImage.addEventListener("change", handleContentImage);
   els.connectObsidianVault?.addEventListener("click", connectObsidianVault);
+  els.obsidianVaultFolder?.addEventListener("change", handleObsidianVaultFolder);
   els.applyImageWidth?.addEventListener("click", applyImageWidthToAll);
   els.applyFixedImageSize?.addEventListener("click", applyFixedImageSizeToAll);
   els.avatarInput.addEventListener("change", handleAvatar);

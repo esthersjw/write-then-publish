@@ -903,6 +903,14 @@ body[data-app-mode="article"] .profile-inline {
   white-space: nowrap;
 }
 
+.obsidian-vault-folder-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .obsidian-vault-row span {
   overflow: hidden;
   color: var(--muted);
