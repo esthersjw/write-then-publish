@@ -754,7 +754,7 @@
           <div class="crop-control">
             <label class="crop-control-label" for="crop-zoom"><span>缩放照片</span><span id="crop-zoom-value">100%</span></label>
             <input id="crop-zoom" type="range" min="100" max="300" value="100">
-            <p class="crop-tip">拖动画面调整构图；右下角 ↘ 手柄可直接调整裁切比例。</p>
+            <p class="crop-tip">拖动画面调整构图；固定宽度后，拖右下角 ↘ 手柄调整裁切比例。</p>
           </div>
           <div class="crop-actions">
             <button class="crop-cancel" id="crop-cancel" type="button">取消</button>
@@ -2600,7 +2600,7 @@ const journalCategoryMap = {
     const cropState = {
       source: "", name: "", itemId: null, ratioKey: "original", ratio: 1,
       naturalWidth: 1, naturalHeight: 1, zoom: 1, panX: 0, panY: 0, freeRatio: 1.5, rotation: 0,
-      metrics: null, initialRect: null, lastCropRect: null, frameTarget: false
+      metrics: null, initialRect: null, lastCropRect: null, frameTarget: false, viewportWidth: null
     };
 
     function safeText(value) {
@@ -3412,7 +3412,8 @@ const journalCategoryMap = {
       cropState.ratio = cropRatioValue(key);
       if (resetPan) { cropState.panX = 0; cropState.panY = 0; }
       cropViewport.style.aspectRatio = String(cropState.ratio);
-      cropViewport.style.maxWidth = cropState.ratio < .82 ? "330px" : cropState.ratio < 1.6 ? "460px" : "100%";
+      cropViewport.style.maxWidth = cropState.viewportWidth ? `${cropState.viewportWidth}px` : (cropState.ratio < .82 ? "330px" : cropState.ratio < 1.6 ? "460px" : "100%");
+      if (cropState.viewportWidth) cropViewport.style.width = `${cropState.viewportWidth}px`;
       document.getElementById("crop-ratio-value").textContent = cropRatioLabels[key];
       document.querySelectorAll(".crop-ratio").forEach(button => button.classList.toggle("active", button.dataset.cropRatio === key));
       document.getElementById("crop-free-control").hidden = key !== "free";
@@ -3667,16 +3668,16 @@ const journalCategoryMap = {
       event.stopPropagation();
       const viewportRect = cropViewport.getBoundingClientRect();
       const areaRect = cropPreviewArea.getBoundingClientRect();
-      cropResizeDrag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, startWidth: viewportRect.width, startHeight: viewportRect.height, areaWidth: areaRect.width, areaHeight: areaRect.height };
+      cropState.viewportWidth = viewportRect.width;
+      cropResizeDrag = { pointerId: event.pointerId, startY: event.clientY, startWidth: viewportRect.width, startHeight: viewportRect.height, areaHeight: areaRect.height };
       try { cropResizeHandle.setPointerCapture(event.pointerId); } catch (_) { /* synthetic events */ }
     });
     cropResizeHandle.addEventListener("pointermove", event => {
       if (!cropResizeDrag || cropResizeDrag.pointerId !== event.pointerId) return;
       event.preventDefault();
       const padding = 32;
-      const nextWidth = Math.max(160, Math.min(cropResizeDrag.areaWidth - padding, cropResizeDrag.startWidth + event.clientX - cropResizeDrag.startX));
       const nextHeight = Math.max(100, Math.min(cropResizeDrag.areaHeight - padding, cropResizeDrag.startHeight + event.clientY - cropResizeDrag.startY));
-      cropState.freeRatio = Math.max(.5, Math.min(4, nextWidth / nextHeight));
+      cropState.freeRatio = Math.max(.5, Math.min(4, cropResizeDrag.startWidth / nextHeight));
       setCropRatio("free", false);
     });
     const finishCropResize = event => { if (cropResizeDrag && cropResizeDrag.pointerId === event.pointerId) cropResizeDrag = null; };
