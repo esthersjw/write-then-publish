@@ -504,8 +504,8 @@
         </div>
         <div class="control-pane" data-editor-pane="text">
         <div class="field text-copy-field">
-          <label class="field-label" for="copy"><span>输入英文</span><span id="char-count">28 / 80</span></label>
-          <textarea id="copy" maxlength="80" spellcheck="false">'Cause you're my home to stay</textarea>
+          <label class="field-label" for="copy"><span>输入文字</span><span id="char-count">0 / 80</span></label>
+          <textarea id="copy" maxlength="80" spellcheck="false"></textarea>
         </div>
         <div class="field font-picker">
           <span class="field-label"><span>字体</span><span>9 款开源字体</span></span>
@@ -519,7 +519,8 @@
           <span class="field-label"><span>自动拆成</span><span>按单词平衡</span></span>
           <div class="segments" data-control="lines">
             <button type="button" data-value="4">4 行</button>
-            <button type="button" class="active" data-value="5">5 行</button>
+            <button type="button" data-value="5">5 行</button>
+            <button type="button" class="active" data-value="0">不拆分</button>
           </div>
         </div>
         <div class="field text-layout-field">
@@ -767,7 +768,7 @@
             </div>
             <div class="crop-free-control" id="crop-free-control" hidden>
               <label class="crop-control-label" for="crop-free-ratio"><span>自由宽高比</span><span id="crop-free-value">1.50 : 1</span></label>
-              <input id="crop-free-ratio" type="range" min="50" max="400" value="150">
+              <input id="crop-free-ratio" type="range" min="8" max="2000" value="150">
             </div>
           </div>
           <div class="crop-control">
@@ -780,7 +781,7 @@
           <div class="crop-control">
             <label class="crop-control-label" for="crop-zoom"><span>缩放照片</span><span id="crop-zoom-value">100%</span></label>
             <input id="crop-zoom" type="range" min="100" max="300" value="100">
-            <p class="crop-tip">拖动画面调整构图；固定宽度后，拖右下角 ↘ 手柄调整裁切比例。</p>
+            <p class="crop-tip">图片保持原始比例；拖动画面调整位置，拖右下角 ↘ 手柄同时调整裁切框宽高。</p>
           </div>
           <div class="crop-actions">
             <button class="crop-cancel" id="crop-cancel" type="button">取消</button>
@@ -2607,7 +2608,7 @@ const journalCategoryMap = {
     ];
 
     const editor = {
-      font: fontsV2[0], lines: 5, layout: "loose", textStyle: "plain", textColor: "#2254e8", textFillColor: "#141414", background: { id: "plain", name: "米白纸张", src: "", ratio: .8 }, posterRatio: { mode: "default", value: .8 }, accentLine: 1, shuffle: 0, category: "936y",
+      font: fontsV2[0], lines: 0, layout: "loose", textStyle: "plain", textColor: "#2254e8", textFillColor: "#141414", background: { id: "plain", name: "米白纸张", src: "", ratio: .8 }, posterRatio: { mode: "default", value: .8 }, accentLine: 1, shuffle: 0, category: "936y",
       items: [], tags: [{ id: "tag-0", text: "@SjwEsther", slot: 5, x: 82, y: 84, rotate: 0, anchor: "right-bottom", align: "right", scale: 1 }], tagZone: { x: 0, y: 0, w: 80, h: 70 }, tagZoneEditing: false, selectedTagId: null, selectedTagIds: [], tagSerial: 1,
       selectedId: null, selectedIds: [], selectedLineIds: [], selectedLayerIds: [], serial: 0, selectedLine: null, lineTransforms: [], history: [], clipboard: null
     };
@@ -2662,8 +2663,10 @@ const journalCategoryMap = {
     }
 
     function balancedCopy(text, lineCount) {
-      const words = text.trim().split(/\s+/).filter(Boolean);
-      if (!words.length) return ["TYPE", "SOMETHING", "BOLD"];
+      const normalized = text.trim();
+      if (!normalized) return [];
+      if (!lineCount || lineCount < 1) return [normalized];
+      const words = normalized.split(/\s+/).filter(Boolean);
       if (words.length <= lineCount) return words;
       const n = words.length;
       const total = words.reduce((sum, word) => sum + word.length, 0) + n - 1;
@@ -3576,6 +3579,7 @@ const journalCategoryMap = {
       cropState.metrics = null;
       cropState.initialRect = null;
       cropState.lastCropRect = null;
+      cropState.viewportWidth = null;
       cropViewport.style.width = "";
       cropViewport.style.maxWidth = "";
       cropOverlay.classList.add("active");
@@ -3745,15 +3749,25 @@ const journalCategoryMap = {
       const viewportRect = cropViewport.getBoundingClientRect();
       const areaRect = cropPreviewArea.getBoundingClientRect();
       cropState.viewportWidth = viewportRect.width;
-      cropResizeDrag = { pointerId: event.pointerId, startY: event.clientY, startWidth: viewportRect.width, startHeight: viewportRect.height, areaHeight: areaRect.height };
+      cropResizeDrag = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startWidth: viewportRect.width,
+        startHeight: viewportRect.height,
+        areaWidth: areaRect.width,
+        areaHeight: areaRect.height
+      };
       try { cropResizeHandle.setPointerCapture(event.pointerId); } catch (_) { /* synthetic events */ }
     });
     cropResizeHandle.addEventListener("pointermove", event => {
       if (!cropResizeDrag || cropResizeDrag.pointerId !== event.pointerId) return;
       event.preventDefault();
       const padding = 32;
+      const nextWidth = Math.max(120, Math.min(cropResizeDrag.areaWidth - padding, cropResizeDrag.startWidth + event.clientX - cropResizeDrag.startX));
       const nextHeight = Math.max(100, Math.min(cropResizeDrag.areaHeight - padding, cropResizeDrag.startHeight + event.clientY - cropResizeDrag.startY));
-      cropState.freeRatio = Math.max(.5, Math.min(4, cropResizeDrag.startWidth / nextHeight));
+      cropState.viewportWidth = nextWidth;
+      cropState.freeRatio = Math.max(.08, Math.min(20, nextWidth / nextHeight));
       setCropRatio("free", false);
     });
     const finishCropResize = event => { if (cropResizeDrag && cropResizeDrag.pointerId === event.pointerId) cropResizeDrag = null; };
