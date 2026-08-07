@@ -2979,10 +2979,11 @@ const journalCategoryMap = {
 
     function renderFontList() {
       const sample = safeText(copyField.value || "Stay a little longer");
+      const chineseFontIds = new Set(["lxgw-wenkai", "qingke-huangyou", "smiley-sans"]);
       fontListEl.innerHTML = fontsV2.map((font, index) => `
         <button type="button" class="font-option ${font.id === editor.font.id ? "active" : ""}" data-font-v2="${font.id}" aria-pressed="${font.id === editor.font.id}">
           <span class="font-option-no">${String(index + 1).padStart(2, "0")}</span>
-          <span class="font-option-main"><span class="font-option-name"><b>${font.name}</b></span><span class="font-option-sample" style="font-family:'${font.family}',sans-serif">${sample}</span></span>
+          <span class="font-option-main"><span class="font-option-name"><b>${font.name}</b></span><span class="font-option-sample" style="font-family:'${font.family}',sans-serif">${chineseFontIds.has(font.id) ? "把日子过成一张海报" : sample}</span></span>
         </button>`).join("");
     }
 
