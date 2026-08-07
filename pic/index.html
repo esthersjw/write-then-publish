@@ -577,7 +577,7 @@
             </div>
             <div class="field">
               <label class="field-label" for="item-size-range"><span>图片大小</span><span id="item-size-value">22%</span></label>
-              <input id="item-size-range" type="range" min="8" max="65" value="22">
+              <input id="item-size-range" type="range" min="8" max="100" value="22">
             </div>
             <div class="field">
               <label class="field-label" for="item-rotation-range"><span>自由旋转</span><span id="item-rotation-value">0°</span></label>
@@ -2962,7 +2962,7 @@ const journalCategoryMap = {
     function nextPosition() {
       const spots = [[18,18],[81,19],[18,43],[80,46],[20,73],[79,77],[49,18],[50,82],[34,58],[67,63]];
       const spot = spots[editor.serial % spots.length];
-      return { x: spot[0] + (editor.serial % 3 - 1) * 2, y: spot[1], rotate: ((editor.serial * 11) % 17) - 8 };
+      return { x: spot[0] + (editor.serial % 3 - 1) * 2, y: spot[1], rotate: 0 };
     }
 
     function itemById(id) { return editor.items.find(item => item.instanceId === id); }
@@ -3228,7 +3228,7 @@ const journalCategoryMap = {
         x: preset.x ?? base.x,
         y: preset.y ?? base.y,
         size: preset.size ?? asset.size ?? 22,
-        rotate: preset.rotate ?? base.rotate,
+        rotate: preset.rotate ?? 0,
         z: preset.z ?? 8 + (editor.serial % 7)
       };
       editor.serial += 1;
@@ -3321,7 +3321,7 @@ const journalCategoryMap = {
       if (!item) return;
       if (["smaller", "larger", "rotate-left", "rotate-right", "back", "front"].includes(action)) pushHistory();
       if (action === "smaller") item.size = Math.max(8, item.size - 3);
-      if (action === "larger") item.size = Math.min(65, item.size + 3);
+      if (action === "larger") item.size = Math.min(100, item.size + 3);
       if (action === "rotate-left") item.rotate = normalizeItemRotation(item.rotate - 15);
       if (action === "rotate-right") item.rotate = normalizeItemRotation(item.rotate + 15);
       if (action === "back") item.z = Math.max(1, item.z - 1);
@@ -4224,7 +4224,7 @@ const journalCategoryMap = {
         }
         if (action.type === "scale") {
           const distance = Math.hypot(event.clientX - action.centerX, event.clientY - action.centerY);
-          action.item.size = Math.max(8, Math.min(65, action.startSize * distance / action.startDistance));
+          action.item.size = Math.max(8, Math.min(100, action.startSize * distance / action.startDistance));
         }
         if (action.type === "ratio" && action.item.photo) {
           const radians = action.item.rotate * Math.PI / 180;
