@@ -11,6 +11,9 @@
     @font-face { font-family: "Knewave Local"; src: url("./assets/knewave.ttf") format("truetype"); font-display: swap; }
     @font-face { font-family: "Titan One Local"; src: url("./assets/titan-one.ttf") format("truetype"); font-display: swap; }
     @font-face { font-family: "Chango Local"; src: url("./assets/chango.ttf") format("truetype"); font-display: swap; }
+    @font-face { font-family: "LXGW WenKai Local"; src: url("./assets/lxgw-wenkai.ttf") format("truetype"); font-display: swap; }
+    @font-face { font-family: "ZCOOL QingKe HuangYou Local"; src: url("./assets/zcool-qingke-huangyou.ttf") format("truetype"); font-display: swap; }
+    @font-face { font-family: "Smiley Sans Local"; src: url("./assets/smiley-sans.woff2") format("woff2"); font-display: swap; }
 
     :root {
       --paper: #f3f0e7;
@@ -485,7 +488,7 @@
   <header class="topbar">
     <span class="topbar-brand"><strong>不二的小画框</strong></span>
     <span class="topbar-center">COLLAGE DESK / ROUND 01</span>
-    <span class="status">6 款字体 · 101 个拼贴素材</span>
+    <span class="status">9 款字体 · 101 个拼贴素材</span>
   </header>
 
   <main>
@@ -505,7 +508,7 @@
           <textarea id="copy" maxlength="80" spellcheck="false">'Cause you're my home to stay</textarea>
         </div>
         <div class="field font-picker">
-          <span class="field-label"><span>字体</span><span>6 款开源字体</span></span>
+          <span class="field-label"><span>字体</span><span>9 款开源字体</span></span>
           <button class="font-picker-toggle" id="font-picker-toggle" type="button" aria-expanded="false" aria-controls="font-picker-panel">
             <span class="font-picker-current"><strong id="selected-name">Modak</strong></span>
             <span class="font-picker-arrow" aria-hidden="true">⌄</span>
@@ -730,7 +733,7 @@
 
     <footer>
       <strong>字体文件已本地化，断网也能预览。</strong>
-      <span>6 款字体均来自 Google Fonts 官方仓库；项目内附各自的 SIL Open Font License 1.1。</span>
+      <span>新增霞鹜文楷、站酷庆科黄油体、得意黑；字体文件已本地化，断网也能预览。</span>
     </footer>
   </main>
 
@@ -796,7 +799,10 @@
       { id: "darumadrop", name: "Darumadrop One", family: "Darumadrop Local", rank: "手写感最强", match: "03 · 最自然歪斜", note: "来自日本手写灵感，轮廓松、有温度；原生字重稍轻，适合搭配描边或重影。", source: "https://fonts.google.com/specimen/Darumadrop+One" },
       { id: "titan", name: "Titan One", family: "Titan One Local", rank: "最稳妥", match: "04 · 复古圆胖", note: "重量足、识别稳定、字宽舒服。少一点手写感，多一点唱片封面和复古广告感。", source: "https://fonts.google.com/specimen/Titan+One" },
       { id: "knewave", name: "Knewave", family: "Knewave Local", rank: "粗笔刷方向", match: "05 · 动势最强", note: "像马克笔快速写出的粗字，斜势明显。适合短标题，正文稍长时会显得更躁动。", source: "https://fonts.google.com/specimen/Knewave" },
-      { id: "chango", name: "Chango", family: "Chango Local", rank: "夸张备选", match: "06 · 拼贴玩具感", note: "轮廓最有装饰性，个别字母像玩具积木。与参考不完全同类，但很适合做特殊单词。", source: "https://fonts.google.com/specimen/Chango" }
+      { id: "chango", name: "Chango", family: "Chango Local", rank: "夸张备选", match: "06 · 拼贴玩具感", note: "轮廓最有装饰性，个别字母像玩具积木。与参考不完全同类，但很适合做特殊单词。", source: "https://fonts.google.com/specimen/Chango" },
+      { id: "lxgw-wenkai", name: "霞鹜文楷", family: "LXGW WenKai Local", rank: "中文手写印刷", match: "07 · 温润耐看", note: "带有楷体和手写印刷的温度，适合中文标题、手账句子和生活方式海报。", source: "https://github.com/lxgw/LxgwWenKai" },
+      { id: "qingke-huangyou", name: "站酷庆科黄油体", family: "ZCOOL QingKe HuangYou Local", rank: "中文粗笔标题", match: "08 · 俏皮醒目", note: "圆润、粗笔、带一点玩具感，适合短句和拼贴里的大字号中文。", source: "https://github.com/googlefonts/zcool-qingke-huangyou" },
+      { id: "smiley-sans", name: "得意黑", family: "Smiley Sans Local", rank: "中文几何黑体", match: "09 · 倾斜有劲", note: "几何结构里带着明显倾斜，适合做更现代、更有动作感的中文标题。", source: "https://github.com/atelier-anchor/smiley-sans" }
     ];
 
     const collageAssets = [
