@@ -642,7 +642,7 @@
       </aside>
 
       <div class="stage-side">
-        <div class="stage-meta"><span>4 : 5 poster preview</span><div class="stage-meta-actions"><span id="stage-font">MODAK / OFL</span><button class="download-button" id="download-webp" type="button">下载 WebP</button></div></div>
+        <div class="stage-meta"><span>4 : 5 poster preview</span><div class="stage-meta-actions"><span id="stage-font">MODAK / OFL</span><button class="download-button" id="download-png" type="button">下载 PNG</button></div></div>
         <div class="poster-shell">
           <div class="poster" id="poster" data-layout="loose">
             <div class="collage-layer" id="collage-layer"></div>
@@ -2845,24 +2845,24 @@ const journalCategoryMap = {
       scheduleFit();
     }
 
-    async function downloadPosterWebp() {
-      const button = document.getElementById("download-webp");
+    async function downloadPosterPng() {
+      const button = document.getElementById("download-png");
       if (!button || typeof window.html2canvas !== "function") {
         updateAssetCount("导出组件还没准备好，请稍后再试");
         return;
       }
       const originalLabel = button.textContent;
       const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-      const suggestedName = `bu-er-collage-${stamp}.webp`;
+      const suggestedName = `bu-er-collage-${stamp}.png`;
       button.disabled = true;
-      button.textContent = "生成 WebP…";
+      button.textContent = "生成 PNG…";
       try {
         let saveHandle = null;
         if (typeof window.showSaveFilePicker === "function") {
           try {
             saveHandle = await window.showSaveFilePicker({
               suggestedName,
-              types: [{ description: "WebP 图片", accept: { "image/webp": [".webp"] } }]
+              types: [{ description: "PNG 图片", accept: { "image/png": [".png"] } }]
             });
           } catch (error) {
             if (error?.name === "AbortError") return;
@@ -2886,13 +2886,13 @@ const journalCategoryMap = {
             });
           }
         });
-        const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/webp", .92));
-        if (!blob) throw new Error("WebP blob unavailable");
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+        if (!blob) throw new Error("PNG blob unavailable");
         if (saveHandle) {
           const writable = await saveHandle.createWritable();
           await writable.write(blob);
           await writable.close();
-          button.textContent = "已保存 WebP";
+          button.textContent = "已保存 PNG";
           setTimeout(() => { button.textContent = originalLabel; }, 1400);
           return;
         }
@@ -4361,7 +4361,7 @@ const journalCategoryMap = {
       if (el) el.style.setProperty("--tag-scale", String(selected[0].scale));
     });
 
-    document.getElementById("download-webp").addEventListener("click", downloadPosterWebp);
+    document.getElementById("download-png").addEventListener("click", downloadPosterPng);
 
     document.getElementById("clear-assets").addEventListener("click", () => {
       if (editor.items.length) pushHistory();
