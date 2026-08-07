@@ -651,6 +651,12 @@
         </div>
         <div class="control-pane" data-editor-pane="background" hidden>
           <p class="background-note">选择一张背景铺满画布，文字和拼贴素材会叠在背景上。</p>
+          <div class="field-label"><span>预览尺寸</span><span>默认尺寸跟随背景</span></div>
+          <div class="segments" data-control="poster-ratio">
+            <button type="button" class="active" data-poster-ratio="default">默认尺寸</button>
+            <button type="button" data-poster-ratio="3:4">3:4</button>
+            <button type="button" data-poster-ratio="9:16">9:16</button>
+          </div>
           <div class="background-grid" id="background-grid" aria-label="背景选择"></div>
           <label class="background-upload" for="background-upload">＋ 上传背景图片</label>
           <input id="background-upload" type="file" accept="image/*" hidden>
@@ -2583,19 +2589,19 @@ const journalCategoryMap = {
     collageAssets.push(...earlyJournalAssets);
 
     const backgroundAssets = [
-      { id: "plain", name: "米白纸张", src: "" },
-      { id: "green-grid", name: "绿色方格纸", src: "./assets/backgrounds/green-grid.png" },
-      { id: "blue-wavy-grid", name: "蓝色手绘方格", src: "./assets/backgrounds/blue-wavy-grid.png" },
-      { id: "windows-hills", name: "Windows 草地", src: "./assets/backgrounds/windows-hills.png" },
-      { id: "sky-clothesline", name: "天空晾衣绳", src: "./assets/backgrounds/sky-clothesline.png" },
-      { id: "seaside-billboard", name: "海边广告牌", src: "./assets/backgrounds/seaside-billboard.png" },
-      { id: "gallery-walkers", name: "画廊行人", src: "./assets/backgrounds/gallery-walkers.png" },
-      { id: "instagram-frame", name: "社交媒体留白", src: "./assets/backgrounds/instagram-frame.png" },
-      { id: "paint-ui", name: "复古 Paint", src: "./assets/backgrounds/paint-ui.png" }
+      { id: "plain", name: "米白纸张", src: "", ratio: .8 },
+      { id: "green-grid", name: "绿色方格纸", src: "./assets/backgrounds/green-grid.png", ratio: .5625 },
+      { id: "blue-wavy-grid", name: "蓝色手绘方格", src: "./assets/backgrounds/blue-wavy-grid.png", ratio: .5626 },
+      { id: "windows-hills", name: "Windows 草地", src: "./assets/backgrounds/windows-hills.png", ratio: .6667 },
+      { id: "sky-clothesline", name: "天空晾衣绳", src: "./assets/backgrounds/sky-clothesline.png", ratio: .5625 },
+      { id: "seaside-billboard", name: "海边广告牌", src: "./assets/backgrounds/seaside-billboard.png", ratio: .707 },
+      { id: "gallery-walkers", name: "画廊行人", src: "./assets/backgrounds/gallery-walkers.png", ratio: .571 },
+      { id: "instagram-frame", name: "社交媒体留白", src: "./assets/backgrounds/instagram-frame.png", ratio: .6783 },
+      { id: "paint-ui", name: "复古 Paint", src: "./assets/backgrounds/paint-ui.png", ratio: .6658 }
     ];
 
     const editor = {
-      font: fontsV2[0], lines: 5, layout: "loose", textStyle: "plain", textColor: "#2254e8", textFillColor: "#141414", background: { id: "plain", name: "米白纸张", src: "" }, accentLine: 1, shuffle: 0, category: "936y",
+      font: fontsV2[0], lines: 5, layout: "loose", textStyle: "plain", textColor: "#2254e8", textFillColor: "#141414", background: { id: "plain", name: "米白纸张", src: "", ratio: .8 }, posterRatio: { mode: "default", value: .8 }, accentLine: 1, shuffle: 0, category: "936y",
       items: [], tags: [{ id: "tag-0", text: "@SjwEsther", slot: 5, x: 82, y: 84, rotate: 0, anchor: "right-bottom", align: "right", scale: 1 }], tagZone: { x: 0, y: 0, w: 80, h: 70 }, tagZoneEditing: false, selectedTagId: null, selectedTagIds: [], tagSerial: 1,
       selectedId: null, selectedIds: [], selectedLineIds: [], selectedLayerIds: [], serial: 0, selectedLine: null, lineTransforms: [], history: [], clipboard: null
     };
@@ -3035,6 +3041,7 @@ const journalCategoryMap = {
         textColor: editor.textColor,
         textFillColor: editor.textFillColor,
         background: JSON.parse(JSON.stringify(editor.background)),
+        posterRatio: JSON.parse(JSON.stringify(editor.posterRatio)),
         accentLine: editor.accentLine
       };
     }
@@ -3063,6 +3070,7 @@ const journalCategoryMap = {
       editor.textColor = snapshot.textColor;
       editor.textFillColor = snapshot.textFillColor || "#141414";
       editor.background = JSON.parse(JSON.stringify(snapshot.background || { id: "plain", name: "米白纸张", src: "" }));
+      editor.posterRatio = JSON.parse(JSON.stringify(snapshot.posterRatio || { mode: "default", value: editor.background.ratio || .8 }));
       editor.accentLine = snapshot.accentLine;
       editor.selectedId = null;
       editor.selectedTagId = null;
@@ -3073,16 +3081,26 @@ const journalCategoryMap = {
       editor.selectedLine = null;
       collageLayer.innerHTML = snapshot.collageHtml;
       renderPosterV2();
-      applyBackground(editor.background, false);
+      applyBackground(editor.background, false, false);
+      applyPosterRatio(editor.posterRatio.mode, editor.posterRatio.value, false);
       editor.items.forEach(syncCollageItem);
       applyLayerSelection([], false);
       updateAssetCount();
     }
 
-    function applyBackground(background, recordHistory = true) {
+    function applyPosterRatio(mode, value, recordHistory = true) {
+      const ratio = Number(value) > 0 ? Number(value) : .8;
+      if (recordHistory && editor.posterRatio && (editor.posterRatio.mode !== mode || editor.posterRatio.value !== ratio)) pushHistory();
+      editor.posterRatio = { mode, value: ratio };
+      posterEl.style.aspectRatio = String(ratio);
+      document.querySelectorAll("[data-poster-ratio]").forEach(button => button.classList.toggle("active", button.dataset.posterRatio === mode));
+    }
+
+    function applyBackground(background, recordHistory = true, resetPosterRatio = true) {
       if (!background) return;
       if (recordHistory && JSON.stringify(editor.background) !== JSON.stringify(background)) pushHistory();
-      editor.background = { id: background.id, name: background.name, src: background.src || "" };
+      editor.background = { id: background.id, name: background.name, src: background.src || "", ratio: background.ratio || .8 };
+      if (resetPosterRatio) applyPosterRatio("default", editor.background.ratio, false);
       posterEl.classList.toggle("has-background", Boolean(editor.background.src));
       posterEl.style.backgroundImage = editor.background.src ? `url("${editor.background.src}")` : "";
       renderBackgroundPicker();
@@ -3783,6 +3801,12 @@ const journalCategoryMap = {
           selected.forEach(index => { editor.lineTransforms[index].textStyle = control.dataset.value; });
           editor.textStyle = control.dataset.value;
           renderPosterV2();
+          return;
+        }
+        if (group.dataset.control === "poster-ratio") {
+          const mode = control.dataset.posterRatio;
+          const value = mode === "3:4" ? .75 : mode === "9:16" ? .5625 : (editor.background?.ratio || .8);
+          applyPosterRatio(mode, value);
           return;
         }
         pushHistory();
@@ -4513,7 +4537,11 @@ const journalCategoryMap = {
       if (!file.type.startsWith("image/")) { updateAssetCount("请选择图片文件"); event.target.value = ""; return; }
       if (file.size > 12 * 1024 * 1024) { updateAssetCount("图片请控制在 12MB 以内"); event.target.value = ""; return; }
       const reader = new FileReader();
-      reader.addEventListener("load", () => applyBackground({ id: `upload-${Date.now()}`, name: file.name || "自定义背景", src: reader.result }));
+      reader.addEventListener("load", () => {
+        const image = new Image();
+        image.onload = () => applyBackground({ id: `upload-${Date.now()}`, name: file.name || "自定义背景", src: reader.result, ratio: image.naturalWidth / image.naturalHeight || .8 });
+        image.src = reader.result;
+      });
       reader.readAsDataURL(file);
       event.target.value = "";
     });
