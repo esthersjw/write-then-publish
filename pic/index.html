@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>不二的拼贴神器</title>
+  <title>不二的小画框</title>
   <style>
     @font-face { font-family: "Modak Local"; src: url("./assets/modak.ttf") format("truetype"); font-display: swap; }
     @font-face { font-family: "Darumadrop Local"; src: url("./assets/darumadrop-one.ttf") format("truetype"); font-display: swap; }
@@ -470,7 +470,7 @@
 </head>
 <body>
   <header class="topbar">
-    <span class="topbar-brand"><strong>不二的拼贴神器</strong></span>
+    <span class="topbar-brand"><strong>不二的小画框</strong></span>
     <span class="topbar-center">COLLAGE DESK / ROUND 01</span>
     <span class="status">6 款字体 · 101 个拼贴素材</span>
   </header>
@@ -596,7 +596,7 @@
             <div class="tag-panel-head"><h3 id="tag-panel-title">配件文字</h3><span id="tag-count">0 个</span></div>
             <div class="tag-create">
               <label class="field-label" for="tag-copy-input"><span id="tag-input-label">输入 / 编辑配件文字</span><span>支持多行</span></label>
-              <textarea id="tag-copy-input" rows="3" maxlength="120" spellcheck="false" placeholder="ROUGH CUT\nTYPE TEST"></textarea>
+              <textarea id="tag-copy-input" rows="3" maxlength="120" spellcheck="false" placeholder="@SjwEsther"></textarea>
               <button class="tag-add-wide" id="add-tag" type="button">＋ 添加为新配件文字</button>
             </div>
             <div class="tag-selection-meta" id="tag-selection-meta">点击画布中的配件文字；Shift 点击可多选</div>
@@ -642,7 +642,7 @@
       </aside>
 
       <div class="stage-side">
-        <div class="stage-meta"><span>4 : 5 poster preview</span><div class="stage-meta-actions"><span id="stage-font">MODAK / OFL</span><button class="download-button" id="download-png" type="button">下载 PNG</button></div></div>
+        <div class="stage-meta"><span>4 : 5 poster preview</span><div class="stage-meta-actions"><span id="stage-font">MODAK / OFL</span><button class="download-button" id="download-webp" type="button">下载 WebP</button></div></div>
         <div class="poster-shell">
           <div class="poster" id="poster" data-layout="loose">
             <div class="collage-layer" id="collage-layer"></div>
@@ -2551,7 +2551,7 @@ const journalCategoryMap = {
 
     const editor = {
       font: fontsV2[0], lines: 5, layout: "loose", textStyle: "plain", textColor: "#2254e8", accentLine: 1, shuffle: 0, category: "936y",
-      items: [], tags: [{ id: "tag-0", text: "ROUGH CUT / TYPE TEST", slot: 5, x: 82, y: 84, rotate: 0, anchor: "right-bottom", align: "right", scale: 1 }], tagZone: { x: 0, y: 0, w: 80, h: 70 }, tagZoneEditing: false, selectedTagId: null, selectedTagIds: [], tagSerial: 1,
+      items: [], tags: [{ id: "tag-0", text: "@SjwEsther", slot: 5, x: 82, y: 84, rotate: 0, anchor: "right-bottom", align: "right", scale: 1 }], tagZone: { x: 0, y: 0, w: 80, h: 70 }, tagZoneEditing: false, selectedTagId: null, selectedTagIds: [], tagSerial: 1,
       selectedId: null, selectedIds: [], selectedLineIds: [], selectedLayerIds: [], serial: 0, selectedLine: null, lineTransforms: [], history: [], clipboard: null
     };
 
@@ -2845,8 +2845,8 @@ const journalCategoryMap = {
       scheduleFit();
     }
 
-    async function downloadPosterPng() {
-      const button = document.getElementById("download-png");
+    async function downloadPosterWebp() {
+      const button = document.getElementById("download-webp");
       if (!button || typeof window.html2canvas !== "function") {
         updateAssetCount("导出组件还没准备好，请稍后再试");
         return;
@@ -2855,14 +2855,14 @@ const journalCategoryMap = {
       const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
       const suggestedName = `bu-er-collage-${stamp}.webp`;
       button.disabled = true;
-      button.textContent = "生成 PNG…";
+      button.textContent = "生成 WebP…";
       try {
         let saveHandle = null;
         if (typeof window.showSaveFilePicker === "function") {
           try {
             saveHandle = await window.showSaveFilePicker({
               suggestedName,
-              types: [{ description: "PNG 图片", accept: { "image/png": [".webp"] } }]
+              types: [{ description: "WebP 图片", accept: { "image/webp": [".webp"] } }]
             });
           } catch (error) {
             if (error?.name === "AbortError") return;
@@ -2886,13 +2886,13 @@ const journalCategoryMap = {
             });
           }
         });
-        const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
-        if (!blob) throw new Error("PNG blob unavailable");
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/webp", .92));
+        if (!blob) throw new Error("WebP blob unavailable");
         if (saveHandle) {
           const writable = await saveHandle.createWritable();
           await writable.write(blob);
           await writable.close();
-          button.textContent = "已保存 PNG";
+          button.textContent = "已保存 WebP";
           setTimeout(() => { button.textContent = originalLabel; }, 1400);
           return;
         }
@@ -4361,7 +4361,7 @@ const journalCategoryMap = {
       if (el) el.style.setProperty("--tag-scale", String(selected[0].scale));
     });
 
-    document.getElementById("download-png").addEventListener("click", downloadPosterPng);
+    document.getElementById("download-webp").addEventListener("click", downloadPosterWebp);
 
     document.getElementById("clear-assets").addEventListener("click", () => {
       if (editor.items.length) pushHistory();
