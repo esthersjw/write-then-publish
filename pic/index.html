@@ -73,7 +73,7 @@
     .controls-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 3px solid var(--ink); }
     .controls h2 { margin: 0; font-size: 1rem; letter-spacing: .04em; }
     .index { color: var(--red); font: italic 800 .8rem Georgia, serif; }
-    .editor-tabs { display: grid; grid-template-columns: repeat(4, 1fr); margin-bottom: 12px; border-bottom: 1px solid var(--ink); }
+    .editor-tabs { display: grid; grid-template-columns: repeat(5, 1fr); margin-bottom: 12px; border-bottom: 1px solid var(--ink); }
     .editor-tab { min-height: 38px; padding: 6px; border: 0; border-bottom: 4px solid transparent; background: transparent; cursor: pointer; color: var(--muted); font-size: .7rem; font-weight: 900; }
     .editor-tab:hover, .editor-tab:focus-visible { outline: 0; background: var(--paper-light); color: var(--ink); }
     .editor-tab.active { color: var(--blue); border-bottom-color: var(--blue); }
@@ -185,8 +185,9 @@
     .poster-shell { min-height: 0; width: 100%; height: 100%; display: grid; place-items: center; margin: 0 auto; padding: clamp(8px, 1.5vw, 18px); background: #c9c3b6; transform: rotate(.35deg); box-shadow: 12px 15px 0 rgba(20,20,20,.08); }
     .poster {
       position: relative; width: auto; height: 100%; max-width: 100%; max-height: 100%; aspect-ratio: 4 / 5; display: grid; place-items: center; container-type: inline-size;
-      overflow: hidden; background: var(--paper-light); border: 1px solid rgba(20,20,20,.12);
+      overflow: hidden; background: var(--paper-light); background-position: center; background-size: cover; background-repeat: no-repeat; border: 1px solid rgba(20,20,20,.12);
     }
+    .poster.has-background::before { opacity: 0; }
     .poster::before {
       content: ""; position: absolute; inset: 0; opacity: .22; pointer-events: none;
       background-image: radial-gradient(#6b6559 0.55px, transparent .65px); background-size: 5px 5px;
@@ -374,6 +375,15 @@
     .asset-card:hover, .asset-card:focus-visible { outline: 0; z-index: 1; border-color: var(--ink); transform: translateY(-2px) rotate(-1deg); }
     .asset-card img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(1px 2px 1px rgba(20,20,20,.12)); pointer-events: none; }
     .asset-card::after { content: "+"; position: absolute; right: 3px; bottom: 2px; width: 15px; height: 15px; display: grid; place-items: center; background: var(--ink); color: var(--paper-light); font-size: .7rem; font-weight: 900; opacity: 0; }
+    .background-note { margin: 0 0 10px; color: var(--muted); font-size: .64rem; line-height: 1.45; }
+    .background-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; max-height: 310px; overflow-y: auto; padding: 2px; }
+    .background-option { position: relative; aspect-ratio: 4 / 5; overflow: hidden; padding: 0; border: 1px solid var(--line); background: var(--paper-light); cursor: pointer; }
+    .background-option img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .background-option span { position: absolute; right: 3px; bottom: 3px; left: 3px; padding: 3px 4px; overflow: hidden; background: rgba(20,20,20,.78); color: var(--paper-light); font-size: .52rem; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+    .background-option.active { border: 3px solid var(--blue); box-shadow: 2px 2px 0 var(--ink); }
+    .background-option[data-background-id="plain"] { display: grid; place-items: center; background: var(--paper-light); color: var(--ink); font-size: .58rem; font-weight: 900; }
+    .background-upload { display: grid; place-items: center; min-height: 36px; margin-top: 10px; border: 1.5px solid var(--ink); background: var(--blue); color: var(--paper-light); cursor: pointer; font-size: .66rem; font-weight: 900; box-shadow: 3px 3px 0 var(--ink); }
+    .background-upload:hover { transform: translate(1px,1px); box-shadow: 2px 2px 0 var(--ink); }
     .asset-card:hover::after, .asset-card:focus-visible::after { opacity: 1; }
     .asset-actions { flex: 0 0 auto; display: grid; grid-template-columns: 1fr auto; gap: 7px; padding: 10px 0 2px; border-top: 1px solid var(--line); background: var(--paper); }
     .upload-button, .clear-button {
@@ -486,6 +496,7 @@
           <button class="editor-tab active" type="button" role="tab" aria-selected="true" data-editor-tab="text">文字与排版</button>
           <button class="editor-tab" type="button" role="tab" aria-selected="false" data-editor-tab="image">图片编辑</button>
           <button class="editor-tab" type="button" role="tab" aria-selected="false" data-editor-tab="tags">配件文字</button>
+          <button class="editor-tab" type="button" role="tab" aria-selected="false" data-editor-tab="background">背景</button>
           <button class="editor-tab" type="button" role="tab" aria-selected="false" data-editor-tab="layers">图层</button>
         </div>
         <div class="control-pane" data-editor-pane="text">
@@ -637,6 +648,12 @@
             </div>
             <div class="tag-list" id="tag-list" aria-label="配件文字列表"></div>
           </section>
+        </div>
+        <div class="control-pane" data-editor-pane="background" hidden>
+          <p class="background-note">选择一张背景铺满画布，文字和拼贴素材会叠在背景上。</p>
+          <div class="background-grid" id="background-grid" aria-label="背景选择"></div>
+          <label class="background-upload" for="background-upload">＋ 上传背景图片</label>
+          <input id="background-upload" type="file" accept="image/*" hidden>
         </div>
         <div class="control-pane" data-editor-pane="layers" hidden>
           <section class="layer-panel" aria-labelledby="layer-title">
@@ -2565,8 +2582,20 @@ const journalCategoryMap = {
     collageAssets.length = 0;
     collageAssets.push(...earlyJournalAssets);
 
+    const backgroundAssets = [
+      { id: "plain", name: "米白纸张", src: "" },
+      { id: "green-grid", name: "绿色方格纸", src: "./assets/backgrounds/green-grid.png" },
+      { id: "blue-wavy-grid", name: "蓝色手绘方格", src: "./assets/backgrounds/blue-wavy-grid.png" },
+      { id: "windows-hills", name: "Windows 草地", src: "./assets/backgrounds/windows-hills.png" },
+      { id: "sky-clothesline", name: "天空晾衣绳", src: "./assets/backgrounds/sky-clothesline.png" },
+      { id: "seaside-billboard", name: "海边广告牌", src: "./assets/backgrounds/seaside-billboard.png" },
+      { id: "gallery-walkers", name: "画廊行人", src: "./assets/backgrounds/gallery-walkers.png" },
+      { id: "instagram-frame", name: "社交媒体留白", src: "./assets/backgrounds/instagram-frame.png" },
+      { id: "paint-ui", name: "复古 Paint", src: "./assets/backgrounds/paint-ui.png" }
+    ];
+
     const editor = {
-      font: fontsV2[0], lines: 5, layout: "loose", textStyle: "plain", textColor: "#2254e8", textFillColor: "#141414", accentLine: 1, shuffle: 0, category: "936y",
+      font: fontsV2[0], lines: 5, layout: "loose", textStyle: "plain", textColor: "#2254e8", textFillColor: "#141414", background: { id: "plain", name: "米白纸张", src: "" }, accentLine: 1, shuffle: 0, category: "936y",
       items: [], tags: [{ id: "tag-0", text: "@SjwEsther", slot: 5, x: 82, y: 84, rotate: 0, anchor: "right-bottom", align: "right", scale: 1 }], tagZone: { x: 0, y: 0, w: 80, h: 70 }, tagZoneEditing: false, selectedTagId: null, selectedTagIds: [], tagSerial: 1,
       selectedId: null, selectedIds: [], selectedLineIds: [], selectedLayerIds: [], serial: 0, selectedLine: null, lineTransforms: [], history: [], clipboard: null
     };
@@ -3005,6 +3034,7 @@ const journalCategoryMap = {
         textStyle: editor.textStyle,
         textColor: editor.textColor,
         textFillColor: editor.textFillColor,
+        background: JSON.parse(JSON.stringify(editor.background)),
         accentLine: editor.accentLine
       };
     }
@@ -3032,6 +3062,7 @@ const journalCategoryMap = {
       editor.textStyle = snapshot.textStyle;
       editor.textColor = snapshot.textColor;
       editor.textFillColor = snapshot.textFillColor || "#141414";
+      editor.background = JSON.parse(JSON.stringify(snapshot.background || { id: "plain", name: "米白纸张", src: "" }));
       editor.accentLine = snapshot.accentLine;
       editor.selectedId = null;
       editor.selectedTagId = null;
@@ -3042,9 +3073,29 @@ const journalCategoryMap = {
       editor.selectedLine = null;
       collageLayer.innerHTML = snapshot.collageHtml;
       renderPosterV2();
+      applyBackground(editor.background, false);
       editor.items.forEach(syncCollageItem);
       applyLayerSelection([], false);
       updateAssetCount();
+    }
+
+    function applyBackground(background, recordHistory = true) {
+      if (!background) return;
+      if (recordHistory && JSON.stringify(editor.background) !== JSON.stringify(background)) pushHistory();
+      editor.background = { id: background.id, name: background.name, src: background.src || "" };
+      posterEl.classList.toggle("has-background", Boolean(editor.background.src));
+      posterEl.style.backgroundImage = editor.background.src ? `url("${editor.background.src}")` : "";
+      renderBackgroundPicker();
+    }
+
+    function renderBackgroundPicker() {
+      const grid = document.getElementById("background-grid");
+      if (!grid) return;
+      const selectedId = editor.background?.id || "plain";
+      grid.innerHTML = backgroundAssets.map(background => background.src
+        ? `<button class="background-option${background.id === selectedId ? " active" : ""}" type="button" data-background-id="${background.id}" title="${safeText(background.name)}"><img src="${background.src}" alt=""><span>${safeText(background.name)}</span></button>`
+        : `<button class="background-option${background.id === selectedId ? " active" : ""}" type="button" data-background-id="plain" title="${safeText(background.name)}">${safeText(background.name)}</button>`
+      ).join("");
     }
 
     function undoLastAction() {
@@ -3824,6 +3875,12 @@ const journalCategoryMap = {
         renderAssetLibrary();
       }
 
+      const backgroundButton = event.target.closest("[data-background-id]");
+      if (backgroundButton) {
+        const background = backgroundAssets.find(entry => entry.id === backgroundButton.dataset.backgroundId);
+        if (background) applyBackground(background);
+      }
+
       const actionButton = event.target.closest("[data-object-action]");
       if (actionButton) editSelected(actionButton.dataset.objectAction);
     });
@@ -4450,6 +4507,17 @@ const journalCategoryMap = {
       reader.readAsDataURL(file);
     });
 
+    document.getElementById("background-upload").addEventListener("change", event => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      if (!file.type.startsWith("image/")) { updateAssetCount("请选择图片文件"); event.target.value = ""; return; }
+      if (file.size > 12 * 1024 * 1024) { updateAssetCount("图片请控制在 12MB 以内"); event.target.value = ""; return; }
+      const reader = new FileReader();
+      reader.addEventListener("load", () => applyBackground({ id: `upload-${Date.now()}`, name: file.name || "自定义背景", src: reader.result }));
+      reader.readAsDataURL(file);
+      event.target.value = "";
+    });
+
     document.addEventListener("keydown", event => {
       const editing = event.target.matches("input,textarea,[contenteditable='true']");
       const modifier = event.ctrlKey || event.metaKey;
@@ -4481,7 +4549,9 @@ const journalCategoryMap = {
     posterResize.observe(posterEl);
 
     renderPosterV2();
+    applyBackground(editor.background, false);
     renderFontList();
+    renderBackgroundPicker();
     renderAssetLibrary();
     updateAssetCount();
 
