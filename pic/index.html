@@ -137,6 +137,8 @@
     .image-object-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 20px; padding: 11px 0; border-bottom: 1px solid var(--ink); }
     .image-object-meta strong { min-width: 0; overflow: hidden; font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
     .image-object-meta span { padding: 3px 6px; background: var(--acid); font-size: .55rem; font-weight: 900; transform: rotate(-2deg); }
+    .image-name-input { width: 100%; min-height: 31px; padding: 5px 7px; border: 1px solid var(--ink); outline: 0; background: var(--paper-light); color: var(--ink); font-size: .72rem; font-weight: 700; }
+    .image-name-input:focus { border-color: var(--blue); box-shadow: 2px 2px 0 var(--blue); }
     .image-action-grid { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--ink); border-left: 1px solid var(--ink); }
     .image-action-button { min-height: 39px; padding: 7px 8px; border: 0; border-right: 1px solid var(--ink); border-bottom: 1px solid var(--ink); background: transparent; cursor: pointer; font-size: .64rem; font-weight: 900; }
     .image-action-button:hover, .image-action-button:focus-visible { outline: 0; background: var(--acid); }
@@ -549,6 +551,10 @@
           <div class="image-editor-empty" id="image-editor-empty"><strong>先选一张图</strong>点击海报里的任意图片或从右侧新增素材，这里会自动切换成它的编辑选项。</div>
           <div class="image-editor-controls" id="image-editor-controls" hidden>
             <div class="image-object-meta"><strong id="object-name">未选择素材</strong><span>IMAGE</span></div>
+            <div class="field">
+              <label class="field-label" for="item-name-input"><span>文件名 / 标签文字</span><span>可编辑</span></label>
+              <input class="image-name-input" id="item-name-input" type="text" maxlength="80" placeholder="例如：周末咖啡" autocomplete="off">
+            </div>
             <div class="field">
               <p class="style-panel-label"><span>图片形式</span><span>默认无边框</span></p>
               <div class="annotation-style-grid" aria-label="图片标注样式">
@@ -2561,6 +2567,7 @@ const journalCategoryMap = {
     const fontPickerToggle = document.getElementById("font-picker-toggle");
     const imageEditorEmpty = document.getElementById("image-editor-empty");
     const imageEditorControls = document.getElementById("image-editor-controls");
+    const itemNameInput = document.getElementById("item-name-input");
     const itemSizeRange = document.getElementById("item-size-range");
     const itemRotationRange = document.getElementById("item-rotation-range");
     const sizeInput = document.getElementById("size");
@@ -2845,9 +2852,22 @@ const journalCategoryMap = {
         return;
       }
       const originalLabel = button.textContent;
+      const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      const suggestedName = `bu-er-collage-${stamp}.webp`;
       button.disabled = true;
       button.textContent = "生成 PNG…";
       try {
+        let saveHandle = null;
+        if (typeof window.showSaveFilePicker === "function") {
+          try {
+            saveHandle = await window.showSaveFilePicker({
+              suggestedName,
+              types: [{ description: "PNG 图片", accept: { "image/png": [".webp"] } }]
+            });
+          } catch (error) {
+            if (error?.name === "AbortError") return;
+          }
+        }
         if (document.fonts?.ready) await document.fonts.ready;
         const canvas = await window.html2canvas(posterEl, {
           scale: 2,
@@ -2868,11 +2888,18 @@ const journalCategoryMap = {
         });
         const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
         if (!blob) throw new Error("PNG blob unavailable");
+        if (saveHandle) {
+          const writable = await saveHandle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          button.textContent = "已保存 PNG";
+          setTimeout(() => { button.textContent = originalLabel; }, 1400);
+          return;
+        }
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
-        const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
         link.href = url;
-        link.download = `bu-er-collage-${stamp}.webp`;
+        link.download = suggestedName;
         document.body.appendChild(link);
         link.click();
         link.remove();
@@ -3144,6 +3171,7 @@ const journalCategoryMap = {
       }
       document.getElementById("recrop-button").hidden = !item || !(item.photo || (item.photoFrame && item.photoSrc));
       document.getElementById("object-name").textContent = item ? `${item.name} · ${Math.round(item.size)}% · ${Math.round(item.rotate)}°` : hasSelection ? `已选 ${valid.length} 个图层 · 请用图层操作` : "未选择素材";
+      itemNameInput.value = item ? item.name : "";
       document.querySelectorAll("[data-item-style]").forEach(button => button.classList.toggle("active", Boolean(item) && button.dataset.itemStyle === (item.visualStyle || "plain")));
       const itemColor = item ? item.annotationColor || "#2254e8" : "#2254e8";
       document.getElementById("item-custom-color").value = itemColor;
@@ -4245,6 +4273,24 @@ const journalCategoryMap = {
       editor.selectedTagIds = [];
       renderTags();
     }, true);
+
+    itemNameInput.addEventListener("focus", () => {
+      if (editor.selectedIds.length === 1) pushHistory();
+    });
+    itemNameInput.addEventListener("input", event => {
+      if (editor.selectedIds.length !== 1) return;
+      const item = itemById(editor.selectedIds[0]);
+      if (!item) return;
+      item.name = event.target.value.trim() || "未命名图片";
+      const el = collageLayer.querySelector(`[data-item-id="${item.instanceId}"]`);
+      if (el) {
+        el.setAttribute("aria-label", `${item.name}，可拖动`);
+        const label = el.querySelector(".item-file-label");
+        if (label) label.textContent = item.name;
+      }
+      document.getElementById("object-name").textContent = `${item.name} · ${Math.round(item.size)}% · ${Math.round(item.rotate)}°`;
+      renderLayerList();
+    });
 
     copyField.addEventListener("input", () => { renderPosterV2(); renderFontList(); });
     sizeInput.addEventListener("input", renderPosterV2);
