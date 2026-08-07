@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Esther不二 | 写了就发</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2317202f'/%3E%3Cpath d='M18 17h28v7H18zm0 13h20v6H18zm0 12h28v6H18z' fill='%23fff'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="src/styles.css?v=20260715-obsidian-direct" />
+  </head>
+  <body>
+    <main class="workspace">
+      <aside id="historySidebar" class="history-sidebar" aria-label="历史记录">
+        <button id="historyToggleBtn" class="history-tab" type="button" title="打开历史记录" aria-label="打开历史记录">
+          <i data-lucide="panel-left-open"></i>
+        </button>
+        <div class="history-drawer">
+          <div class="history-head">
+            <span>历史记录</span>
+            <button id="historyCloseBtn" class="icon-button ghost" type="button" title="收起历史记录" aria-label="收起历史记录">
+              <i data-lucide="panel-left-close"></i>
+            </button>
+          </div>
+          <small class="history-note">自动保存，点击恢复</small>
+          <div class="history-filter" aria-label="历史记录筛选">
+            <button type="button" class="active" data-history-filter="all">全部</button>
+            <button type="button" data-history-filter="cards">图文</button>
+            <button type="button" data-history-filter="article">长文</button>
+          </div>
+          <div id="projectHistory" class="history-list"></div>
+        </div>
+      </aside>
+      <button class="panel-resizer" data-panel-resize="history" type="button" aria-label="拖动调整历史栏宽度"></button>
+
+      <aside class="editor-panel" aria-label="编辑器">
+        <div class="brand-row">
+          <div class="brand-title">
+            <h1>写了就发</h1>
+            <span class="brand-english">Esther不二 · @SjwEsther</span>
+            <p id="pageCount">0 张图片</p>
+          </div>
+          <div class="mode-switch" aria-label="切换工作区">
+            <button type="button" class="active" data-app-mode="cards">图文卡片</button>
+            <button type="button" data-app-mode="article">长文</button>
+          </div>
+          <div class="brand-actions">
+            <button class="icon-button" id="newProjectBtn" type="button" title="新建图文" aria-label="新建图文">
+              <i data-lucide="plus"></i>
+            </button>
+            <button class="secondary-button convert-mode-button" id="convertModeBtn" type="button">
+              <i data-lucide="repeat-2"></i>
+              <span>转长文</span>
+            </button>
+            <button class="secondary-button header-mode-button" id="headerModeToggleBtn" type="button">
+              <i data-lucide="user-round"></i>
+              每页头像
+            </button>
+            <button class="icon-button" id="themeToggleBtn" type="button" title="切换黑白主题" aria-label="切换黑白主题">
+              <i data-lucide="palette"></i>
+            </button>
+          </div>
+        </div>
+
+        <section class="editor-controls" aria-label="编辑工具">
+          <div class="profile-inline">
+            <label class="avatar-picker" title="修改头像">
+              <img id="avatarPreview" alt="头像预览" />
+              <input id="avatarInput" type="file" accept="image/*" />
+            </label>
+            <input id="displayNameInput" class="compact-input name-input" type="text" aria-label="名称" />
+            <input id="handleInput" class="compact-input handle-input" type="text" aria-label="英文昵称" />
+            <button id="cropAvatarBtn" class="tool-button" type="button" title="裁剪头像" aria-label="裁剪头像">
+              <i data-lucide="crop"></i>
+            </button>
+          </div>
+
+          <div class="toolbar" aria-label="文字样式">
+            <button type="button" class="tool-button" data-format="h1" title="大标题">H1</button>
+            <button type="button" class="tool-button" data-format="h2" title="小标题">H2</button>
+            <button type="button" class="tool-button" data-format="bold" title="加粗"><strong>B</strong></button>
+            <button type="button" class="tool-button" data-format="italic" title="斜体"><em>I</em></button>
+            <button type="button" class="tool-button" data-format="quote" title="重点引用"><i data-lucide="quote"></i></button>
+            <label class="tool-button file-tool" title="插入图片" aria-label="插入图片">
+              <i data-lucide="image-plus"></i>
+              <input id="contentImageInput" type="file" accept="image/*" multiple />
+            </label>
+            <details id="obsidianImportMenu" class="tool-menu obsidian-import-menu">
+              <summary class="tool-button" title="从 Obsidian 导入图文" aria-label="从 Obsidian 导入图文">
+                <i data-lucide="clipboard-paste"></i>
+              </summary>
+              <div class="tool-popover obsidian-import-popover">
+                <div class="obsidian-import-heading">
+                  <strong>从 Obsidian 导入图文</strong>
+                  <span>连接一次仓库后，只需在左侧原文编辑区粘贴。</span>
+                </div>
+                <div class="obsidian-vault-row">
+                  <button id="connectObsidianVaultBtn" class="secondary-button" type="button">
+                    <i data-lucide="folder-open"></i>
+                    连接 Obsidian 仓库
+                  </button>
+                  <span id="obsidianVaultStatus">尚未连接仓库</span>
+                </div>
+                <p id="obsidianImportStatus" class="obsidian-direct-paste-hint" aria-live="polite">连接后，直接在左侧原文编辑区粘贴整篇 Obsidian Markdown；其中的图片会自动读取。</p>
+              </div>
+            </details>
+            <details id="colorMenu" class="tool-menu">
+              <summary class="tool-button color-tool" title="选中文字颜色" aria-label="选中文字颜色">
+                <i data-lucide="paintbrush"></i>
+              </summary>
+              <div class="tool-popover color-popover">
+                <div id="colorGuide" class="color-guide">
+                  <strong>文字上色</strong>
+                  <span>1. 选择颜色  2. 点确定  3. 在文本框里选中要上色的文字</span>
+                </div>
+                <label>
+                  字体颜色
+                  <input id="inlineColorInput" type="color" value="#2563eb" />
+                </label>
+                <div class="color-actions">
+                  <button id="colorCancelBtn" class="secondary-button" type="button">取消</button>
+                  <button id="colorConfirmBtn" class="primary-button" type="button">确定</button>
+                </div>
+              </div>
+            </details>
+
+            <details id="bgColorMenu" class="tool-menu">
+              <summary class="tool-button bg-color-tool" title="选中文字背景色" aria-label="选中文字背景色">
+                <i data-lucide="highlighter"></i>
+              </summary>
+              <div class="tool-popover color-popover">
+                <div class="color-guide">
+                  <strong>背景上色</strong>
+                  <span>1. 选择背景色  2. 点确定  3. 连续选中文字刷底色，点取消结束</span>
+                </div>
+                <label>
+                  背景颜色
+                  <input id="inlineBgColorInput" type="color" value="#fff3a3" />
+                </label>
+                <div class="color-actions">
+                  <button id="bgColorCancelBtn" class="secondary-button" type="button">取消</button>
+                  <button id="bgColorConfirmBtn" class="primary-button" type="button">确定</button>
+                </div>
+              </div>
+            </details>
+
+            <details class="tool-menu">
+              <summary class="tool-button" title="查找替换" aria-label="查找替换">
+                <i data-lucide="search"></i>
+              </summary>
+              <div class="tool-popover search-popover">
+                <label>
+                  查找
+                  <input id="findInput" type="text" autocomplete="off" />
+                </label>
+                <label>
+                  替换为
+                  <input id="replaceInput" type="text" autocomplete="off" />
+                </label>
+                <button id="findNextBtn" class="secondary-button" type="button">
+                  <i data-lucide="search"></i>
+                  查找
+                </button>
+                <button id="replaceOneBtn" class="secondary-button" type="button">
+                  <i data-lucide="replace"></i>
+                  替换当前
+                </button>
+                <button id="replaceAllBtn" class="secondary-button wide" type="button">
+                  <i data-lucide="replace-all"></i>
+                  全文替换
+                </button>
+              </div>
+            </details>
+
+            <details class="tool-menu">
+              <summary class="tool-button" title="图片裁剪" aria-label="图片裁剪">
+                <i data-lucide="images"></i>
+              </summary>
+              <div class="tool-popover image-popover">
+                <div class="image-batch-controls">
+                  <label>
+                    图片宽度
+                    <span class="percent-input">
+                      <input id="imageWidthPercentInput" type="number" min="25" max="100" step="1" value="100" />
+                      <b>%</b>
+                    </span>
+                  </label>
+                  <button id="applyImageWidthBtn" class="secondary-button" type="button">
+                    批量应用
+                  </button>
+                  <label>
+                    固定宽
+                    <span class="unit-input">
+                      <input id="fixedImageWidthInput" type="number" min="80" max="780" step="1" placeholder="宽" />
+                      <b>px</b>
+                    </span>
+                  </label>
+                  <label>
+                    固定高
+                    <span class="unit-input">
+                      <input id="fixedImageHeightInput" type="number" min="80" max="760" step="1" placeholder="高" />
+                      <b>px</b>
+                    </span>
+                  </label>
+                  <button id="applyFixedImageSizeBtn" class="secondary-button wide" type="button">
+                    应用固定宽高
+                  </button>
+                </div>
+                <div id="imageList" class="image-list"></div>
+              </div>
+            </details>
+
+            <details class="tool-menu settings-menu">
+              <summary class="tool-button" title="设计设置" aria-label="设计设置">
+                <i data-lucide="sliders-horizontal"></i>
+              </summary>
+              <div class="tool-popover settings-popover">
+                <div class="settings-grid">
+                  <label>
+                    文字色
+                    <input id="textColorInput" type="color" value="#202938" />
+                  </label>
+                  <label>
+                    强调色
+                    <input id="accentColorInput" type="color" value="#2563eb" />
+                  </label>
+                  <label>
+                    背景色
+                    <input id="bgColorInput" type="color" value="#ffffff" />
+                  </label>
+                  <label>
+                    字号
+                    <input id="fontSizeInput" type="number" min="24" max="40" value="31" />
+                  </label>
+                  <label>
+                    行距
+                    <input id="lineHeightInput" type="number" min="1" max="2.4" step="0.05" value="1.65" />
+                  </label>
+                  <label>
+                    空行高度
+                    <input id="blankLineHeightInput" type="number" min="8" max="160" step="2" value="26" />
+                  </label>
+                  <label>
+                    中文字体
+                    <select id="zhFontInput">
+                      <option value="zh-system">苹方 / 系统黑体</option>
+                      <option value="zh-song">宋体</option>
+                      <option value="zh-kai">楷体</option>
+                      <option value="zh-hei">黑体</option>
+                    </select>
+                  </label>
+                  <label>
+                    英文字体
+                    <select id="enFontInput">
+                      <option value="en-system">系统无衬线</option>
+                      <option value="en-serif">Serif</option>
+                      <option value="en-rounded">Rounded</option>
+                      <option value="en-mono">Mono</option>
+                    </select>
+                  </label>
+                  <label>
+                    图片最大高
+                    <input id="imageHeightInput" type="number" min="220" max="760" value="520" />
+                  </label>
+                </div>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <p class="editor-source-note">Obsidian 原文编辑区：改字、回车，或删掉图片引用，右侧都会实时更新。</p>
+        <textarea id="contentInput" class="editor-textarea" spellcheck="false"></textarea>
+      </aside>
+      <button class="panel-resizer" data-panel-resize="editor" type="button" aria-label="拖动调整编辑区宽度"></button>
+
+      <section class="preview-panel" aria-label="图片预览">
+        <div class="preview-topbar">
+          <div>
+            <h2>预览与下载</h2>
+            <span id="statusText">自动分页已开启</span>
+          </div>
+          <div class="topbar-actions">
+            <button id="scrollModeBtn" class="secondary-button" type="button">
+              <i data-lucide="scroll-text"></i>
+              滑动截图
+            </button>
+            <button id="downloadZipBtn" class="primary-button" type="button">
+              <i data-lucide="download"></i>
+              批量下载
+            </button>
+            <button id="openImagePreviewBtn" class="secondary-button" type="button" title="逐张放大预览">
+              <i data-lucide="maximize-2"></i>
+              逐张预览
+            </button>
+            <button id="downloadArticleBtn" class="primary-button" type="button" hidden>
+              <i data-lucide="download"></i>
+              下载长图
+            </button>
+          </div>
+        </div>
+        <div class="preview-body">
+          <div id="pages" class="pages"></div>
+          <aside id="articleSettings" class="article-settings" aria-label="长文设置" hidden>
+            <section>
+              <h3>主题</h3>
+              <div class="article-option-grid">
+                <button type="button" class="article-option active" data-article-theme="classic">经典</button>
+                <button type="button" class="article-option" data-article-theme="elegant">优雅</button>
+                <button type="button" class="article-option" data-article-theme="clean">简洁</button>
+                <button type="button" class="article-option" data-article-theme="wechat">微信绿</button>
+                <button type="button" class="article-option" data-article-theme="colorful">多彩微信</button>
+              </div>
+            </section>
+            <section>
+              <h3>字体</h3>
+              <div class="article-option-grid three">
+                <button type="button" class="article-option active" data-article-font="sans">无衬线</button>
+                <button type="button" class="article-option" data-article-font="serif">衬线</button>
+                <button type="button" class="article-option" data-article-font="mono">等宽</button>
+              </div>
+            </section>
+            <section>
+              <h3>字号</h3>
+              <div class="article-option-grid">
+                <button type="button" class="article-option" data-article-size="small">更小</button>
+                <button type="button" class="article-option active" data-article-size="normal">推荐</button>
+                <button type="button" class="article-option" data-article-size="large">稍大</button>
+              </div>
+            </section>
+            <section>
+              <h3>主题色</h3>
+              <div class="article-color-grid">
+                <button type="button" class="article-color active" data-article-color="#0f766e" style="--swatch:#0f766e">翡翠绿</button>
+                <button type="button" class="article-color" data-article-color="#2563eb" style="--swatch:#2563eb">经典蓝</button>
+                <button type="button" class="article-color" data-article-color="#ef4444" style="--swatch:#ef4444">活力橘</button>
+                <button type="button" class="article-color" data-article-color="#7c3aed" style="--swatch:#7c3aed">薰衣紫</button>
+                <button type="button" class="article-color" data-article-color="#111827" style="--swatch:#111827">石墨黑</button>
+              </div>
+            </section>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-credit" aria-label="项目署名">
+      <span>Esther不二</span>
+      <a href="https://github.com/esthersjw/write-then-publish" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://xhslink.com/m/AlYEQruvY4V" target="_blank" rel="noopener noreferrer">小红书</a>
+      <a href="https://x.com/SjwEsther" target="_blank" rel="noopener noreferrer">𝕏 @SjwEsther</a>
+      <span class="site-credit-source">原项目：<a href="https://github.com/fxyadela/write-then-publish" target="_blank" rel="noopener noreferrer">捏捏番茄</a></span>
+    </footer>
+
+    <div id="cropModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="cropTitle">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div>
+            <h3 id="cropTitle">裁剪图片</h3>
+            <p id="cropSubtitle">拖动裁剪框，选择要保留的区域</p>
+          </div>
+          <button id="cropCloseBtn" class="icon-button ghost" type="button" title="关闭" aria-label="关闭裁剪">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="crop-layout">
+          <div class="crop-stage">
+            <canvas id="cropCanvas" width="720" height="500"></canvas>
+          </div>
+          <aside class="crop-controls">
+            <div>
+              <div class="section-title">比例</div>
+              <div class="ratio-grid">
+                <button class="ratio-button active" type="button" data-ratio="free">自由</button>
+                <button class="ratio-button" type="button" data-ratio="original">原图</button>
+                <button class="ratio-button" type="button" data-ratio="1">1:1</button>
+                <button class="ratio-button" type="button" data-ratio="1.333333">4:3</button>
+                <button class="ratio-button" type="button" data-ratio="1.777778">16:9</button>
+                <button class="ratio-button" type="button" data-ratio="0.75">3:4</button>
+                <button class="ratio-button" type="button" data-ratio="0.5625">9:16</button>
+              </div>
+            </div>
+            <div class="crop-actions">
+              <button id="cropResetBtn" class="secondary-button" type="button">
+                <i data-lucide="rotate-ccw"></i>
+                恢复原图
+              </button>
+              <button id="cropApplyBtn" class="primary-button" type="button">
+                <i data-lucide="check"></i>
+                应用裁剪
+              </button>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+
+    <div id="imagePreviewModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="imagePreviewTitle">
+      <div class="image-preview-card">
+        <div class="modal-head">
+          <div>
+            <h3 id="imagePreviewTitle">单图预览</h3>
+            <p id="imagePreviewMeta">图片 01</p>
+          </div>
+          <button id="imagePreviewCloseBtn" class="icon-button ghost" type="button" title="关闭" aria-label="关闭预览">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="image-preview-stage">
+          <img id="imagePreviewImage" alt="导出图片预览" />
+        </div>
+        <div class="image-preview-actions">
+          <button id="imagePreviewPreviousBtn" class="secondary-button" type="button"><i data-lucide="chevron-left"></i>上一张</button>
+          <button id="imagePreviewDownloadBtn" class="primary-button" type="button"><i data-lucide="download"></i>保存这张</button>
+          <button id="imagePreviewNextBtn" class="secondary-button" type="button">下一张<i data-lucide="chevron-right"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <script src="vendor/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <script src="vendor/html2canvas.min.js"></script>
+    <script src="src/app.js?v=20260715-obsidian-direct"></script>
+  </body>
+</html>
