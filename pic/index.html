@@ -207,7 +207,7 @@
     .tag-handle { position: absolute; right: -.5em; bottom: -.5em; display: none; width: 1.1em; height: 1.1em; place-items: center; border: 1px solid var(--ink); background: var(--blue); color: var(--paper-light); font: 800 .72em/1 sans-serif; cursor: nwse-resize; }
     .poster-tag.selected .tag-handle { display: grid; }
     .poster-type { --text-mark: var(--blue); --text-on-mark: var(--paper-light); position: relative; z-index: auto; width: 84%; max-height: 84%; color: var(--ink); font-family: "Modak Local", sans-serif; font-size: calc(var(--poster-size) * 1cqi); letter-spacing: -.035em; pointer-events: none; }
-    .poster-line { position: relative; z-index: 16; display: block; width: max-content; max-width: 100%; line-height: var(--poster-leading); white-space: nowrap; transform-origin: center; cursor: grab; pointer-events: auto; }
+    .poster-line { position: relative; z-index: 16; display: block; width: max-content; max-width: 100%; line-height: var(--poster-leading); color: var(--text-fill, inherit); white-space: nowrap; transform-origin: center; cursor: grab; pointer-events: auto; }
     .poster-line:active { cursor: grabbing; }
     .poster-line:focus-visible { outline: 2px dashed var(--blue); outline-offset: 4px; }
     .poster-line.line-selected { outline: .025em dashed var(--blue); outline-offset: .06em; }
@@ -406,10 +406,13 @@
     .crop-body { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(220px, .55fr); }
     .crop-preview-area { min-width: 0; display: grid; place-items: center; min-height: 460px; padding: clamp(18px, 3vw, 34px); background: #cec7b9; }
     .crop-viewport {
-      position: relative; width: 100%; aspect-ratio: 3 / 1; overflow: hidden; cursor: grab; touch-action: none;
+      position: relative; width: 100%; aspect-ratio: 3 / 1; overflow: visible; cursor: grab; touch-action: none;
       border: 2px solid var(--paper-light); background: #282621; box-shadow: 0 0 0 1px var(--ink);
     }
+    .crop-clip { position: absolute; inset: 0; overflow: hidden; }
     .crop-viewport:active { cursor: grabbing; }
+    .crop-resize-handle { position: absolute; right: -12px; bottom: -12px; z-index: 4; width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--ink); background: var(--acid); color: var(--ink); box-shadow: 2px 2px 0 rgba(20,20,20,.22); cursor: nwse-resize; font-size: .85rem; font-weight: 900; line-height: 1; touch-action: none; }
+    .crop-resize-handle:active { background: var(--blue); color: var(--paper-light); }
     .crop-image-wrap { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); transform-origin: center; will-change: transform; }
     .crop-image { display: block; max-width: none; user-select: none; pointer-events: none; -webkit-user-drag: none; transform-origin: center; will-change: transform; }
     .crop-grid { position: absolute; inset: 0; pointer-events: none; opacity: .55; background-image: linear-gradient(to right, transparent 33.15%, rgba(255,253,246,.8) 33.15% 33.5%, transparent 33.5% 66.5%, rgba(255,253,246,.8) 66.5% 66.85%, transparent 66.85%), linear-gradient(to bottom, transparent 33.15%, rgba(255,253,246,.8) 33.15% 33.5%, transparent 33.5% 66.5%, rgba(255,253,246,.8) 66.5% 66.85%, transparent 66.85%); }
@@ -532,6 +535,16 @@
             <button class="annotation-swatch" type="button" data-text-color="#2d966f" style="--swatch:#2d966f" aria-label="绿色"></button>
             <button class="annotation-swatch" type="button" data-text-color="#f07ead" style="--swatch:#f07ead;--swatch-on:#141414" aria-label="粉色"></button>
             <input class="annotation-custom-color" id="text-custom-color" type="color" value="#2254e8" aria-label="自定义文字标注颜色">
+          </div>
+          <div class="field-label"><span>文字颜色</span><span>正文填色</span></div>
+          <div class="annotation-color-row" aria-label="文字颜色">
+            <button class="annotation-swatch active" type="button" data-text-fill-color="#141414" style="--swatch:#141414" aria-label="黑色"></button>
+            <button class="annotation-swatch" type="button" data-text-fill-color="#2254e8" style="--swatch:#2254e8" aria-label="蓝色"></button>
+            <button class="annotation-swatch" type="button" data-text-fill-color="#e34b36" style="--swatch:#e34b36" aria-label="红色"></button>
+            <button class="annotation-swatch" type="button" data-text-fill-color="#f0c72f" style="--swatch:#f0c72f;--swatch-on:#141414" aria-label="黄色"></button>
+            <button class="annotation-swatch" type="button" data-text-fill-color="#a65de4" style="--swatch:#a65de4" aria-label="紫色"></button>
+            <button class="annotation-swatch" type="button" data-text-fill-color="#2d966f" style="--swatch:#2d966f" aria-label="绿色"></button>
+            <input class="annotation-custom-color" id="text-fill-custom-color" type="color" value="#141414" aria-label="自定义文字颜色">
           </div>
         </div>
         <div class="text-metrics-row">
@@ -708,8 +721,11 @@
       <div class="crop-body">
         <div class="crop-preview-area">
           <div class="crop-viewport" id="crop-viewport">
-            <div class="crop-image-wrap" id="crop-image-wrap"><img class="crop-image" id="crop-image" alt="待裁切照片"></div>
-            <span class="crop-grid" aria-hidden="true"></span>
+            <div class="crop-clip">
+              <div class="crop-image-wrap" id="crop-image-wrap"><img class="crop-image" id="crop-image" alt="待裁切照片"></div>
+              <span class="crop-grid" aria-hidden="true"></span>
+            </div>
+            <button class="crop-resize-handle" id="crop-resize-handle" type="button" aria-label="调整裁切框大小">↘</button>
           </div>
         </div>
         <aside class="crop-controls">
@@ -2550,7 +2566,7 @@ const journalCategoryMap = {
     collageAssets.push(...earlyJournalAssets);
 
     const editor = {
-      font: fontsV2[0], lines: 5, layout: "loose", textStyle: "plain", textColor: "#2254e8", accentLine: 1, shuffle: 0, category: "936y",
+      font: fontsV2[0], lines: 5, layout: "loose", textStyle: "plain", textColor: "#2254e8", textFillColor: "#141414", accentLine: 1, shuffle: 0, category: "936y",
       items: [], tags: [{ id: "tag-0", text: "@SjwEsther", slot: 5, x: 82, y: 84, rotate: 0, anchor: "right-bottom", align: "right", scale: 1 }], tagZone: { x: 0, y: 0, w: 80, h: 70 }, tagZoneEditing: false, selectedTagId: null, selectedTagIds: [], tagSerial: 1,
       selectedId: null, selectedIds: [], selectedLineIds: [], selectedLayerIds: [], serial: 0, selectedLine: null, lineTransforms: [], history: [], clipboard: null
     };
@@ -2575,14 +2591,16 @@ const journalCategoryMap = {
     const tagCopyInput = document.getElementById("tag-copy-input");
     const tagScaleRange = document.getElementById("tag-scale-range");
     const cropOverlay = document.getElementById("crop-overlay");
+    const cropPreviewArea = document.querySelector(".crop-preview-area");
     const cropViewport = document.getElementById("crop-viewport");
     const cropImageWrap = document.getElementById("crop-image-wrap");
     const cropImage = document.getElementById("crop-image");
     const cropZoom = document.getElementById("crop-zoom");
+    const cropResizeHandle = document.getElementById("crop-resize-handle");
     const cropState = {
       source: "", name: "", itemId: null, ratioKey: "original", ratio: 1,
       naturalWidth: 1, naturalHeight: 1, zoom: 1, panX: 0, panY: 0, freeRatio: 1.5, rotation: 0,
-      metrics: null, initialRect: null, lastCropRect: null, frameTarget: false
+      metrics: null, initialRect: null, lastCropRect: null, frameTarget: false, viewportWidth: null
     };
 
     function safeText(value) {
@@ -2650,7 +2668,7 @@ const journalCategoryMap = {
     function ensureLineTransforms(count) {
       while (editor.lineTransforms.length < count) {
         const index = editor.lineTransforms.length;
-        editor.lineTransforms.push({ x: 0, y: 0, rotate: 0, scale: 1, z: 16 + index, textStyle: "plain", textColor: "#2254e8" });
+        editor.lineTransforms.push({ x: 0, y: 0, rotate: 0, scale: 1, z: 16 + index, textStyle: "plain", textColor: "#2254e8", textFillColor: "#141414" });
       }
       editor.lineTransforms.length = count;
       if (Number.isInteger(editor.selectedLine)) editor.selectedLine = Math.min(editor.selectedLine, Math.max(0, count - 1));
@@ -2684,11 +2702,15 @@ const journalCategoryMap = {
       }).filter(Boolean);
       const style = selected.length === 1 ? (selected[0].textStyle || "plain") : "plain";
       const color = selected.length === 1 ? (normalizeHex(selected[0].textColor) || "#2254e8") : "#2254e8";
+      const fillColor = selected.length === 1 ? (normalizeHex(selected[0].textFillColor) || "#141414") : "#141414";
       document.querySelectorAll("[data-control='text-style'] button").forEach(button => button.classList.toggle("active", button.dataset.value === style));
       document.querySelectorAll("[data-text-color]").forEach(button => button.classList.toggle("active", button.dataset.textColor.toLowerCase() === color.toLowerCase()));
       document.getElementById("text-custom-color").value = color;
+      document.querySelectorAll("[data-text-fill-color]").forEach(button => button.classList.toggle("active", button.dataset.textFillColor.toLowerCase() === fillColor.toLowerCase()));
+      document.getElementById("text-fill-custom-color").value = fillColor;
       editor.textStyle = style;
       editor.textColor = color;
+      editor.textFillColor = fillColor;
     }
 
     function syncLineTransforms() {
@@ -2834,7 +2856,8 @@ const journalCategoryMap = {
         const transform = editor.lineTransforms[index] || {};
         const style = transform.textStyle || "plain";
         const color = normalizeHex(transform.textColor) || "#2254e8";
-        return `<span class="poster-line line-style-${style}" style="--text-mark:${color};--text-on-mark:${contrastFor(color)}" data-line-index="${index}" role="button" tabindex="0" aria-label="选择第 ${index + 1} 行作为文字装饰目标">${safeText(line)}<i class="text-node tl" aria-hidden="true"></i><i class="text-node tr" aria-hidden="true"></i><i class="text-node bl" aria-hidden="true"></i><i class="text-node br" aria-hidden="true"></i><em class="text-file-label" aria-hidden="true">LINE_${String(index + 1).padStart(2, "0")}.TXT</em><span class="line-handle line-handle-scale" data-line-handle="scale" aria-hidden="true" title="缩放文字"></span><span class="line-handle line-handle-rotate" data-line-handle="rotate" aria-hidden="true" title="旋转文字">↻</span></span>`;
+        const fillColor = normalizeHex(transform.textFillColor) || "#141414";
+        return `<span class="poster-line line-style-${style}" style="--text-mark:${color};--text-on-mark:${contrastFor(color)};--text-fill:${fillColor}" data-line-index="${index}" role="button" tabindex="0" aria-label="选择第 ${index + 1} 行作为文字装饰目标">${safeText(line)}<i class="text-node tl" aria-hidden="true"></i><i class="text-node tr" aria-hidden="true"></i><i class="text-node bl" aria-hidden="true"></i><i class="text-node br" aria-hidden="true"></i><em class="text-file-label" aria-hidden="true">LINE_${String(index + 1).padStart(2, "0")}.TXT</em><span class="line-handle line-handle-scale" data-line-handle="scale" aria-hidden="true" title="缩放文字"></span><span class="line-handle line-handle-rotate" data-line-handle="rotate" aria-hidden="true" title="旋转文字">↻</span></span>`;
       }).join("");
       syncLineTransforms();
       posterEl.dataset.layout = editor.layout;
@@ -2981,6 +3004,7 @@ const journalCategoryMap = {
         layout: editor.layout,
         textStyle: editor.textStyle,
         textColor: editor.textColor,
+        textFillColor: editor.textFillColor,
         accentLine: editor.accentLine
       };
     }
@@ -3007,6 +3031,7 @@ const journalCategoryMap = {
       editor.layout = snapshot.layout;
       editor.textStyle = snapshot.textStyle;
       editor.textColor = snapshot.textColor;
+      editor.textFillColor = snapshot.textFillColor || "#141414";
       editor.accentLine = snapshot.accentLine;
       editor.selectedId = null;
       editor.selectedTagId = null;
@@ -3387,7 +3412,8 @@ const journalCategoryMap = {
       cropState.ratio = cropRatioValue(key);
       if (resetPan) { cropState.panX = 0; cropState.panY = 0; }
       cropViewport.style.aspectRatio = String(cropState.ratio);
-      cropViewport.style.maxWidth = cropState.ratio < .82 ? "330px" : cropState.ratio < 1.6 ? "460px" : "100%";
+      cropViewport.style.maxWidth = cropState.viewportWidth ? `${cropState.viewportWidth}px` : (cropState.ratio < .82 ? "330px" : cropState.ratio < 1.6 ? "460px" : "100%");
+      if (cropState.viewportWidth) cropViewport.style.width = `${cropState.viewportWidth}px`;
       document.getElementById("crop-ratio-value").textContent = cropRatioLabels[key];
       document.querySelectorAll(".crop-ratio").forEach(button => button.classList.toggle("active", button.dataset.cropRatio === key));
       document.getElementById("crop-free-control").hidden = key !== "free";
@@ -3474,6 +3500,9 @@ const journalCategoryMap = {
       cropState.metrics = null;
       cropState.initialRect = null;
       cropState.lastCropRect = null;
+      cropState.viewportWidth = null;
+      cropViewport.style.width = "";
+      cropViewport.style.maxWidth = "";
       cropOverlay.classList.add("active");
       document.body.style.overflow = "hidden";
       document.getElementById("crop-title").textContent = item ? "重新裁切照片" : "裁切照片";
@@ -3634,6 +3663,30 @@ const journalCategoryMap = {
     cropViewport.addEventListener("pointerup", finishCropDrag);
     cropViewport.addEventListener("pointercancel", finishCropDrag);
 
+    let cropResizeDrag = null;
+    cropResizeHandle.addEventListener("pointerdown", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const viewportRect = cropViewport.getBoundingClientRect();
+      const areaRect = cropPreviewArea.getBoundingClientRect();
+      cropResizeDrag = { pointerId: event.pointerId, startX: event.clientX, startWidth: viewportRect.width, areaWidth: areaRect.width };
+      try { cropResizeHandle.setPointerCapture(event.pointerId); } catch (_) { /* synthetic events */ }
+    });
+    cropResizeHandle.addEventListener("pointermove", event => {
+      if (!cropResizeDrag || cropResizeDrag.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      const padding = 32;
+      const maxWidth = Math.max(160, cropResizeDrag.areaWidth - padding);
+      const nextWidth = Math.max(160, Math.min(maxWidth, cropResizeDrag.startWidth + event.clientX - cropResizeDrag.startX));
+      cropState.viewportWidth = nextWidth;
+      cropViewport.style.width = `${nextWidth}px`;
+      cropViewport.style.maxWidth = `${nextWidth}px`;
+      renderCropPreview();
+    });
+    const finishCropResize = event => { if (cropResizeDrag && cropResizeDrag.pointerId === event.pointerId) cropResizeDrag = null; };
+    cropResizeHandle.addEventListener("pointerup", finishCropResize);
+    cropResizeHandle.addEventListener("pointercancel", finishCropResize);
+
     document.querySelectorAll("[data-crop-ratio]").forEach(button => button.addEventListener("click", () => setCropRatio(button.dataset.cropRatio)));
     document.getElementById("crop-rotate-left").addEventListener("click", () => rotateCrop(-90));
     document.getElementById("crop-rotate-right").addEventListener("click", () => rotateCrop(90));
@@ -3704,6 +3757,9 @@ const journalCategoryMap = {
 
       const textColorButton = event.target.closest("[data-text-color]");
       if (textColorButton) setTextAnnotationColor(textColorButton.dataset.textColor);
+
+      const textFillColorButton = event.target.closest("[data-text-fill-color]");
+      if (textFillColorButton) setTextFillColor(textFillColorButton.dataset.textFillColor);
 
       const itemColorButton = event.target.closest("[data-item-color]");
       if (itemColorButton) setItemAnnotationColor(itemColorButton.dataset.itemColor);
@@ -3823,6 +3879,16 @@ const journalCategoryMap = {
       renderPosterV2();
     }
 
+    function setTextFillColor(value) {
+      const color = normalizeHex(value);
+      const selected = editor.selectedLineIds.map(id => Number(String(id).slice(5))).filter(index => Number.isInteger(index) && editor.lineTransforms[index]);
+      if (!color || !selected.length) return;
+      if (selected.some(index => (normalizeHex(editor.lineTransforms[index].textFillColor) || "#141414") !== color)) pushHistory();
+      selected.forEach(index => { editor.lineTransforms[index].textFillColor = color; });
+      editor.textFillColor = color;
+      renderPosterV2();
+    }
+
     function setItemAnnotationColor(value) {
       const color = normalizeHex(value);
       const item = itemById(editor.selectedId);
@@ -3834,6 +3900,7 @@ const journalCategoryMap = {
     }
 
     document.getElementById("text-custom-color").addEventListener("input", event => setTextAnnotationColor(event.target.value));
+    document.getElementById("text-fill-custom-color").addEventListener("input", event => setTextFillColor(event.target.value));
     document.getElementById("item-custom-color").addEventListener("input", event => setItemAnnotationColor(event.target.value));
     itemSizeRange.addEventListener("input", event => {
       const item = itemById(editor.selectedId);
