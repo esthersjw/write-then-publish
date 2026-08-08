@@ -214,7 +214,9 @@
     .poster-line { position: relative; z-index: 16; display: block; width: max-content; max-width: 100%; line-height: var(--poster-leading); color: var(--text-fill, inherit); white-space: nowrap; transform-origin: center; cursor: grab; pointer-events: auto; }
     .poster-line:active { cursor: grabbing; }
     .poster-line:focus-visible { outline: 2px dashed var(--blue); outline-offset: 4px; }
-    .poster-line.line-selected { outline: .025em dashed var(--blue); outline-offset: .06em; }
+    .poster-line.line-selected { outline: none; }
+    .line-select-frame { position: absolute; z-index: 6; display: none; left: -.04em; right: -.04em; top: .02em; bottom: -.06em; border: .025em dashed var(--blue); pointer-events: none; }
+    .poster-line.line-selected .line-select-frame { display: block; }
     .line-handle { position: absolute; z-index: 8; display: none; width: 15px; height: 15px; border: 2px solid var(--paper-light); background: var(--blue); box-shadow: 0 0 0 1px var(--blue); pointer-events: auto; touch-action: none; }
     .poster-line.line-selected .line-handle { display: grid; place-items: center; }
     .line-handle-scale { right: -.5em; bottom: -.5em; cursor: nwse-resize; }
@@ -239,7 +241,7 @@
     .poster-line.line-style-label .text-file-label { display: block; }
     .text-node { position: absolute; z-index: 4; display: none; width: .13em; height: .13em; border: .025em solid var(--text-mark); background: var(--paper-light); pointer-events: none; }
     .text-node.tl { left: -.1em; top: -.09em; } .text-node.tr { right: -.1em; top: -.09em; } .text-node.bl { left: -.1em; bottom: -.09em; } .text-node.br { right: -.1em; bottom: -.09em; }
-    .text-file-label { position: absolute; z-index: 5; display: none; right: -.12em; bottom: -.43em; padding: .2em .38em; color: var(--text-on-mark); background: var(--text-mark); font-family: "Avenir Next", Avenir, "PingFang SC", sans-serif; font-size: .13em; font-style: normal; font-weight: 900; letter-spacing: .04em; line-height: 1; }
+    .text-file-label { position: absolute; z-index: 5; display: none; right: -.06em; top: -.58em; bottom: auto; padding: .2em .38em; color: var(--text-on-mark); background: var(--text-mark); font-family: "Avenir Next", Avenir, "PingFang SC", sans-serif; font-size: .13em; font-style: normal; font-weight: 900; letter-spacing: .04em; line-height: 1; white-space: nowrap; }
     .poster-line:nth-child(odd) { margin-left: -2%; }
     .poster-line:nth-child(even) { margin-left: auto; }
     .poster-line:nth-child(1) { transform: rotate(-1.4deg) scaleX(1.03); }
@@ -2901,7 +2903,7 @@ const journalCategoryMap = {
         const style = transform.textStyle || "plain";
         const color = normalizeHex(transform.textColor) || "#2254e8";
         const fillColor = normalizeHex(transform.textFillColor) || "#141414";
-        return `<span class="poster-line line-style-${style}" style="--text-mark:${color};--text-on-mark:${contrastFor(color)};--text-fill:${fillColor}" data-line-index="${index}" role="button" tabindex="0" aria-label="选择第 ${index + 1} 行作为文字装饰目标">${safeText(line)}<i class="text-node tl" aria-hidden="true"></i><i class="text-node tr" aria-hidden="true"></i><i class="text-node bl" aria-hidden="true"></i><i class="text-node br" aria-hidden="true"></i><em class="text-file-label" aria-hidden="true">LINE_${String(index + 1).padStart(2, "0")}.TXT</em><span class="line-handle line-handle-scale" data-line-handle="scale" aria-hidden="true" title="缩放文字"></span><span class="line-handle line-handle-rotate" data-line-handle="rotate" aria-hidden="true" title="旋转文字">↻</span></span>`;
+        return `<span class="poster-line line-style-${style}" style="--text-mark:${color};--text-on-mark:${contrastFor(color)};--text-fill:${fillColor}" data-line-index="${index}" role="button" tabindex="0" aria-label="选择第 ${index + 1} 行作为文字装饰目标">${safeText(line)}<span class="line-select-frame" aria-hidden="true"></span><i class="text-node tl" aria-hidden="true"></i><i class="text-node tr" aria-hidden="true"></i><i class="text-node bl" aria-hidden="true"></i><i class="text-node br" aria-hidden="true"></i><em class="text-file-label" aria-hidden="true">LINE_${String(index + 1).padStart(2, "0")}.TXT</em><span class="line-handle line-handle-scale" data-line-handle="scale" aria-hidden="true" title="缩放文字"></span><span class="line-handle line-handle-rotate" data-line-handle="rotate" aria-hidden="true" title="旋转文字">↻</span></span>`;
       }).join("");
       syncLineTransforms();
       posterEl.dataset.layout = editor.layout;
@@ -2947,8 +2949,8 @@ const journalCategoryMap = {
             const clonedPoster = clonedDocument.getElementById("poster");
             if (!clonedPoster) return;
             clonedPoster.classList.remove("tag-mode");
-            clonedPoster.querySelectorAll(".selected").forEach(element => element.classList.remove("selected"));
-            clonedPoster.querySelectorAll(".tag-zone, .tag-zone-label, .line-handle, .item-handle, .frame-node, .round-node, .corner-bracket, .text-node, .item-file-label").forEach(element => {
+            clonedPoster.querySelectorAll(".selected, .line-selected").forEach(element => element.classList.remove("selected", "line-selected"));
+            clonedPoster.querySelectorAll(".tag-zone, .tag-zone-label, .line-select-frame, .line-handle, .item-handle, .frame-node, .round-node, .corner-bracket, .text-node, .item-file-label").forEach(element => {
               element.style.setProperty("display", "none", "important");
             });
           }
