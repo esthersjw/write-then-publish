@@ -504,13 +504,13 @@
         </div>
         <div class="control-pane" data-editor-pane="text">
         <div class="field text-copy-field">
-          <label class="field-label" for="copy"><span>输入文字</span><span id="char-count">0 / 80</span></label>
-          <textarea id="copy" maxlength="80" spellcheck="false"></textarea>
+          <label class="field-label" for="copy"><span>输入文字</span><span id="char-count">34 / 80</span></label>
+          <textarea id="copy" maxlength="80" spellcheck="false">Hi this is Esther nice to meet you</textarea>
         </div>
         <div class="field font-picker">
           <span class="field-label"><span>字体</span><span>9 款开源字体</span></span>
           <button class="font-picker-toggle" id="font-picker-toggle" type="button" aria-expanded="false" aria-controls="font-picker-panel">
-            <span class="font-picker-current"><strong id="selected-name">Modak</strong></span>
+            <span class="font-picker-current"><strong id="selected-name">Darumadrop One</strong></span>
             <span class="font-picker-arrow" aria-hidden="true">⌄</span>
           </button>
           <div class="font-picker-panel" id="font-picker-panel" hidden><div id="font-list"></div></div>
@@ -518,9 +518,9 @@
         <div class="field text-lines-field">
           <span class="field-label"><span>自动拆成</span><span>按单词平衡</span></span>
           <div class="segments" data-control="lines">
-            <button type="button" data-value="4">4 行</button>
+            <button type="button" class="active" data-value="4">4 行</button>
             <button type="button" data-value="5">5 行</button>
-            <button type="button" class="active" data-value="0">不拆分</button>
+            <button type="button" data-value="0">不拆分</button>
           </div>
         </div>
         <div class="field text-layout-field">
@@ -2608,7 +2608,7 @@ const journalCategoryMap = {
     ];
 
     const editor = {
-      font: fontsV2[0], lines: 0, layout: "loose", textStyle: "plain", textColor: "#2254e8", textFillColor: "#141414", background: { id: "plain", name: "米白纸张", src: "", ratio: .8 }, posterRatio: { mode: "default", value: .8 }, accentLine: 1, shuffle: 0, category: "936y",
+      font: fontsV2[2], lines: 4, layout: "loose", textStyle: "plain", textColor: "#2254e8", textFillColor: "#141414", background: { id: "plain", name: "米白纸张", src: "", ratio: .8 }, posterRatio: { mode: "default", value: .8 }, accentLine: 1, shuffle: 0, category: "936y",
       items: [], tags: [{ id: "tag-0", text: "@SjwEsther", slot: 5, x: 82, y: 84, rotate: 0, anchor: "right-bottom", align: "right", scale: 1 }], tagZone: { x: 0, y: 0, w: 80, h: 70 }, tagZoneEditing: false, selectedTagId: null, selectedTagIds: [], tagSerial: 1,
       selectedId: null, selectedIds: [], selectedLineIds: [], selectedLayerIds: [], serial: 0, selectedLine: null, lineTransforms: [], history: [], clipboard: null
     };
@@ -2642,7 +2642,7 @@ const journalCategoryMap = {
     const cropState = {
       source: "", name: "", itemId: null, ratioKey: "original", ratio: 1,
       naturalWidth: 1, naturalHeight: 1, zoom: 1, panX: 0, panY: 0, freeRatio: 1.5, rotation: 0,
-      metrics: null, initialRect: null, lastCropRect: null, frameTarget: false, viewportWidth: null
+      metrics: null, initialRect: null, lastCropRect: null, frameTarget: false, viewportWidth: null, frameImage: null
     };
 
     function safeText(value) {
@@ -3466,7 +3466,7 @@ const journalCategoryMap = {
       const quarterTurn = Math.abs(cropState.rotation) % 180 === 90;
       const orientedWidth = quarterTurn ? cropState.naturalHeight : cropState.naturalWidth;
       const orientedHeight = quarterTurn ? cropState.naturalWidth : cropState.naturalHeight;
-      const baseScale = Math.max(viewWidth / orientedWidth, viewHeight / orientedHeight);
+      const baseScale = cropState.frameImage ? cropState.frameImage.scale / Math.max(.0001, cropState.zoom) : Math.max(viewWidth / orientedWidth, viewHeight / orientedHeight);
       const baseWidth = cropState.naturalWidth * baseScale;
       const baseHeight = cropState.naturalHeight * baseScale;
       const displayWidth = orientedWidth * baseScale * cropState.zoom;
@@ -3475,8 +3475,10 @@ const journalCategoryMap = {
       const maxY = Math.max(0, (displayHeight - viewHeight) / 2);
       cropState.panX = Math.max(-1, Math.min(1, cropState.panX));
       cropState.panY = Math.max(-1, Math.min(1, cropState.panY));
-      const offsetX = cropState.panX * maxX;
-      const offsetY = cropState.panY * maxY;
+      const offsetX = cropState.frameImage ? cropState.frameImage.offsetX : cropState.panX * maxX;
+      const offsetY = cropState.frameImage ? cropState.frameImage.offsetY : cropState.panY * maxY;
+      cropState.panX = maxX ? Math.max(-1, Math.min(1, offsetX / maxX)) : 0;
+      cropState.panY = maxY ? Math.max(-1, Math.min(1, offsetY / maxY)) : 0;
       cropImageWrap.style.width = `${baseWidth}px`;
       cropImageWrap.style.height = `${baseHeight}px`;
       cropImageWrap.style.transform = `translate(-50%,-50%) translate(${offsetX}px,${offsetY}px) rotate(${cropState.rotation}deg)`;
@@ -3486,7 +3488,8 @@ const journalCategoryMap = {
       cropState.metrics = { viewWidth, viewHeight, baseScale, displayWidth, displayHeight, maxX, maxY, offsetX, offsetY, orientedWidth, orientedHeight };
     }
 
-    function setCropRatio(key, resetPan = true) {
+    function setCropRatio(key, resetPan = true, keepImage = false) {
+      if (!keepImage && key !== "free") cropState.frameImage = null;
       cropState.ratioKey = key;
       cropState.ratio = cropRatioValue(key);
       if (resetPan) { cropState.panX = 0; cropState.panY = 0; }
@@ -3580,6 +3583,7 @@ const journalCategoryMap = {
       cropState.initialRect = null;
       cropState.lastCropRect = null;
       cropState.viewportWidth = null;
+      cropState.frameImage = null;
       cropViewport.style.width = "";
       cropViewport.style.maxWidth = "";
       cropOverlay.classList.add("active");
@@ -3734,8 +3738,13 @@ const journalCategoryMap = {
       if (!cropDrag || cropDrag.pointerId !== event.pointerId || !cropState.metrics) return;
       const x = Math.max(-cropState.metrics.maxX, Math.min(cropState.metrics.maxX, cropDrag.offsetX + event.clientX - cropDrag.startX));
       const y = Math.max(-cropState.metrics.maxY, Math.min(cropState.metrics.maxY, cropDrag.offsetY + event.clientY - cropDrag.startY));
-      cropState.panX = cropState.metrics.maxX ? x / cropState.metrics.maxX : 0;
-      cropState.panY = cropState.metrics.maxY ? y / cropState.metrics.maxY : 0;
+      if (cropState.frameImage) {
+        cropState.frameImage.offsetX = x;
+        cropState.frameImage.offsetY = y;
+      } else {
+        cropState.panX = cropState.metrics.maxX ? x / cropState.metrics.maxX : 0;
+        cropState.panY = cropState.metrics.maxY ? y / cropState.metrics.maxY : 0;
+      }
       renderCropPreview();
     });
     const finishCropDrag = event => { if (cropDrag && cropDrag.pointerId === event.pointerId) cropDrag = null; };
@@ -3749,6 +3758,7 @@ const journalCategoryMap = {
       const viewportRect = cropViewport.getBoundingClientRect();
       const areaRect = cropPreviewArea.getBoundingClientRect();
       cropState.viewportWidth = viewportRect.width;
+      const imageScale = cropState.metrics ? cropState.metrics.baseScale * cropState.zoom : null;
       cropResizeDrag = {
         pointerId: event.pointerId,
         startX: event.clientX,
@@ -3756,7 +3766,10 @@ const journalCategoryMap = {
         startWidth: viewportRect.width,
         startHeight: viewportRect.height,
         areaWidth: areaRect.width,
-        areaHeight: areaRect.height
+        areaHeight: areaRect.height,
+        imageScale,
+        imageOffsetX: cropState.metrics ? cropState.metrics.offsetX : 0,
+        imageOffsetY: cropState.metrics ? cropState.metrics.offsetY : 0
       };
       try { cropResizeHandle.setPointerCapture(event.pointerId); } catch (_) { /* synthetic events */ }
     });
@@ -3768,7 +3781,14 @@ const journalCategoryMap = {
       const nextHeight = Math.max(100, Math.min(cropResizeDrag.areaHeight - padding, cropResizeDrag.startHeight + event.clientY - cropResizeDrag.startY));
       cropState.viewportWidth = nextWidth;
       cropState.freeRatio = Math.max(.08, Math.min(20, nextWidth / nextHeight));
-      setCropRatio("free", false);
+      if (cropResizeDrag.imageScale) {
+        cropState.frameImage = {
+          scale: cropResizeDrag.imageScale,
+          offsetX: cropResizeDrag.imageOffsetX,
+          offsetY: cropResizeDrag.imageOffsetY
+        };
+      }
+      setCropRatio("free", false, true);
     });
     const finishCropResize = event => { if (cropResizeDrag && cropResizeDrag.pointerId === event.pointerId) cropResizeDrag = null; };
     cropResizeHandle.addEventListener("pointerup", finishCropResize);
@@ -3778,6 +3798,7 @@ const journalCategoryMap = {
     document.getElementById("crop-rotate-left").addEventListener("click", () => rotateCrop(-90));
     document.getElementById("crop-rotate-right").addEventListener("click", () => rotateCrop(90));
     cropZoom.addEventListener("input", event => {
+      cropState.frameImage = null;
       cropState.zoom = Number(event.target.value) / 100;
       document.getElementById("crop-zoom-value").textContent = `${event.target.value}%`;
       renderCropPreview();
